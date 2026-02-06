@@ -86,8 +86,44 @@ export function createClassroom(scene) {
   // ====== 广播喇叭 (Speakers) ======
   addBroadcasters(classroom, W, D);
 
+  // ====== 360度天空围幕（4面平面，从地面开始） ======
+  createSkySurround(classroom, W, D);
+
   scene.add(classroom);
   return classroom;
+}
+
+// ==================== 360度天空围幕 ====================
+
+/**
+ * 用4面平面围成一圈天空，从地面往上，确保地平线在正确位置
+ */
+function createSkySurround(parent, W, D) {
+  const loader = new THREE.TextureLoader();
+  const dist = 40;       // 天空面距教室中心的距离
+  const skyW = 100;      // 每面天空的宽度
+  const skyH = 40;       // 每面天空的高度
+  const centerZ = -D / 2; // 教室深度中心
+
+  // 4个方向：左(-X)、右(+X)、前(-Z)、后(+Z)
+  const sides = [
+    { rx: 0, ry: Math.PI / 2,  px: -dist, py: skyH / 2 - 0.1, pz: centerZ },   // 左
+    { rx: 0, ry: -Math.PI / 2, px: dist,  py: skyH / 2 - 0.1, pz: centerZ },   // 右
+    { rx: 0, ry: 0,            px: 0,     py: skyH / 2 - 0.1, pz: centerZ - dist }, // 前
+    { rx: 0, ry: Math.PI,      px: 0,     py: skyH / 2 - 0.1, pz: centerZ + dist }, // 后
+  ];
+
+  sides.forEach(s => {
+    const tex = loader.load('/textures/FullskiesSunset0001_1_L.jpg');
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(skyW, skyH),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+    );
+    plane.rotation.y = s.ry;
+    plane.position.set(s.px, s.py, s.pz);
+    parent.add(plane);
+  });
 }
 
 // ==================== 装饰扩充 ====================
@@ -183,7 +219,8 @@ function createFloorMaterial() {
   return new THREE.MeshStandardMaterial({ 
     map: texture,
     roughness: 0.4,
-    metalness: 0.1
+    metalness: 0.1,
+    emissive: 0x333333
   });
 }
 
@@ -271,8 +308,59 @@ function createBlackboard(parent, D) {
   const group = new THREE.Group();
   const loader = new THREE.TextureLoader();
 
+  // 绘制粉笔字 Canvas
+  const chalkCanvas = document.createElement('canvas');
+  chalkCanvas.width = 2048;
+  chalkCanvas.height = 1024;
+  const chalkCtx = chalkCanvas.getContext('2d');
+  chalkCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  chalkCtx.font = 'bold 120px "KaiTi", "STKaiti", "Microsoft YaHei", sans-serif';
+  chalkCtx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+  chalkCtx.shadowBlur = 10;
+  chalkCtx.fillText('今日课题：启明3D虚拟课堂', 200, 250);
+  chalkCtx.font = '80px "KaiTi", "STKaiti", "Microsoft YaHei", sans-serif';
+  chalkCtx.fillText('一、环境初始化', 250, 450);
+  chalkCtx.fillText('二、3D模型加载与交互', 250, 580);
+  chalkCtx.fillText('三、场景光影渲染', 250, 710);
+  chalkCtx.strokeStyle = 'white';
+  chalkCtx.lineWidth = 8;
+  chalkCtx.beginPath();
+  chalkCtx.moveTo(200, 280);
+  chalkCtx.lineTo(1500, 280);
+  chalkCtx.stroke();
+  const handwritingTex = new THREE.CanvasTexture(chalkCanvas);
+
+  // 绘制右黑板 AI 知识点 Canvas
+  const aiCanvas = document.createElement('canvas');
+  aiCanvas.width = 2048;
+  aiCanvas.height = 1024;
+  const aiCtx = aiCanvas.getContext('2d');
+  aiCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  aiCtx.font = 'bold 90px "KaiTi", "STKaiti", "Microsoft YaHei", sans-serif';
+  aiCtx.fillText('人工智能 (AI) 核心架构', 100, 150);
+  
+  aiCtx.font = '60px "KaiTi", "STKaiti", "Microsoft YaHei", sans-serif';
+  aiCtx.fillText('• 大语言模型 (LLM): Transformer, Attention', 150, 280);
+  aiCtx.fillText('• 多模态处理 (Multimodal): Vision + Audio + Text', 150, 380);
+  aiCtx.fillText('• RAG (检索增强生成) & Agent 智能体', 150, 480);
+  aiCtx.fillText('• Tokenization & Embedding 向量空间', 150, 580);
+  aiCtx.fillText('• 模型微调 (Fine-tuning) 与 RLHF', 150, 680);
+  
+  // 绘制简单的逻辑框图
+  aiCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  aiCtx.lineWidth = 5;
+  aiCtx.strokeRect(100, 750, 500, 150);
+  aiCtx.fillText('Input', 280, 840);
+  aiCtx.beginPath();
+  aiCtx.moveTo(600, 825);
+  aiCtx.lineTo(800, 825);
+  aiCtx.stroke();
+  aiCtx.strokeRect(800, 750, 600, 150);
+  aiCtx.fillText('LLM Core', 950, 840);
+  
+  const aiNotesTex = new THREE.CanvasTexture(aiCanvas);
+
   // 加载黑板素材
-  const handwritingTex = loader.load('/textures/blackboard/chalkhandwriting.png');
   const scheduleTex = loader.load('/textures/blackboard/schedule.png');
 
   // 加载木纹素材用于边框
@@ -296,7 +384,7 @@ function createBlackboard(parent, D) {
   const frameThickness = 0.06;
 
   // 辅助函数：创建一个黑板块
-  const createBoardPart = (x, width, texture) => {
+  const createBoardPart = (x, width, texture, aspect = 1, isWidget = false) => {
     // 黑板面
     const board = new THREE.Mesh(new THREE.BoxGeometry(width, boardH, 0.05), boardMat);
     board.position.set(x, boardY, -D + 0.03);
@@ -304,9 +392,30 @@ function createBlackboard(parent, D) {
 
     // 如果有贴图（手写或课程表），在黑板面前方添加一个贴图层
     if (texture) {
-      // 保持贴图比例，或者简单铺满。这里采用稍微缩小的方案留白
+      let texW, texH, posX, posY;
+      
+      if (isWidget) {
+        // 作为小挂件：占 1/5 比例左右，位于右上角
+        // schedule.png 特有的 aspect (404/603)
+        texH = boardH * 0.45; 
+        texW = texH * aspect;
+        
+        posX = x + (width / 2 - texW / 2 - 0.15);
+        posY = boardY + (boardH / 2 - texH / 2 - 0.15);
+      } else {
+        // 默认方案：铺满中心
+        texW = width * 0.9;
+        texH = texW / aspect;
+        if (texH > boardH * 0.85) {
+          texH = boardH * 0.85;
+          texW = texH * aspect;
+        }
+        posX = x;
+        posY = boardY;
+      }
+
       const texPlane = new THREE.Mesh(
-        new THREE.PlaneGeometry(width * 0.9, boardH * 0.85),
+        new THREE.PlaneGeometry(texW, texH),
         new THREE.MeshStandardMaterial({ 
           map: texture, 
           transparent: true,
@@ -314,7 +423,7 @@ function createBlackboard(parent, D) {
         })
       );
       // 0.03 (中心) + 0.025 (厚度一半) + 0.001 (间隙) = 0.056
-      texPlane.position.set(x, boardY, -D + 0.056);
+      texPlane.position.set(posX, posY, -D + 0.056);
       group.add(texPlane);
     }
 
@@ -336,14 +445,35 @@ function createBlackboard(parent, D) {
     return { leftBound: x - width/2, rightBound: x + width/2 };
   };
 
-  // 左黑板：放置手写粉笔字
-  const leftSide = createBoardPart(-2.7, 2.4, handwritingTex);
+  // 左黑板：放置手写粉笔字 (2048x1024 => aspect 2)
+  const leftSide = createBoardPart(-2.7, 2.4, handwritingTex, 2);
   const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, boardH + frameThickness * 2, 0.08), frameMat);
   frameLeft.position.set(leftSide.leftBound, boardY, -D + 0.03);
   group.add(frameLeft);
 
-  // 右黑板：放置课程表
-  const rightSide = createBoardPart(2.7, 2.4, scheduleTex);
+  // 右黑板：先放置底层 AI 知识点 (铺满大部分区域)
+  const rightSide = createBoardPart(2.7, 2.4, aiNotesTex, 2);
+  
+  // 然后在右黑板右上角叠加上“评比/课表”挂件
+  // 使用相同的 createBoardPart 逻辑，但通过 isWidget 控制位置
+  const widgetH = boardH * 0.45;
+  const widgetW = widgetH * (404 / 603);
+  const widgetPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(widgetW, widgetH),
+    new THREE.MeshStandardMaterial({ 
+      map: scheduleTex, 
+      transparent: true,
+      roughness: 0.8
+    })
+  );
+  // 稍微比黑板面更考前一点，防止深度冲突 (0.056 -> 0.058)
+  widgetPlane.position.set(
+    2.7 + (2.4 / 2 - widgetW / 2 - 0.15), 
+    boardY + (boardH / 2 - widgetH / 2 - 0.15), 
+    -D + 0.058
+  );
+  group.add(widgetPlane);
+
   const frameRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, boardH + frameThickness * 2, 0.08), frameMat);
   frameRight.position.set(rightSide.rightBound, boardY, -D + 0.03);
   group.add(frameRight);
@@ -362,9 +492,11 @@ function createSmartDisplay(parent, D) {
   const frameThickness = 0.06;
   const totalH = boardH + frameThickness * 2;
 
-  // 16:9 标准屏幕比例
+  // 维持原图比例 (2388x1502)
   const screenW = 2.8;
-  const screenH = screenW * (9 / 16);
+  const screenAspect = 2388 / 1502;
+  const screenH = screenW / screenAspect;
+
   const shellW = 3.0; // 与黑板间隙严丝合缝
   const shellH = totalH; // 上下对齐
   const centerX = 0; 
@@ -379,56 +511,10 @@ function createSmartDisplay(parent, D) {
   shell.position.set(centerX, 1.8, -D + 0.04);
   group.add(shell);
 
-  // 创建电脑界面纹理 - 维持 16:9 比例分辨率 (2560x1440)
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = 2560;
-  canvas.height = 1440;
-
-  // 背景：Windows 风格
-  const grd = ctx.createLinearGradient(0, 0, 2560, 1440);
-  grd.addColorStop(0, '#004a99');
-  grd.addColorStop(1, '#0078d7');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, 2560, 1440);
-
-  // 任务栏
-  ctx.fillStyle = 'rgba(20, 20, 20, 0.85)';
-  ctx.fillRect(0, 1440 - 80, 2560, 80);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 40px "Microsoft YaHei"';
-  ctx.textAlign = 'center';
-  ctx.fillText('⊞', 1280, 1440 - 30);
-
-  // 模拟桌面图标
-  const drawIcon = (x, y, color, label) => {
-    ctx.fillStyle = color;
-    if (ctx.roundRect) {
-      ctx.beginPath();
-      ctx.roundRect(x, y, 80, 80, 15);
-      ctx.fill();
-    } else {
-      ctx.fillRect(x, y, 80, 80);
-    }
-    ctx.fillStyle = 'white';
-    ctx.font = '32px "Microsoft YaHei"';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, x + 40, y + 130);
-  };
-  drawIcon(80, 80, '#ffffff', '此电脑');
-  drawIcon(80, 280, '#ffcc00', '教学课件');
-
-  // 演示窗口
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
-  ctx.fillRect(400, 200, 1800, 1000);
-  ctx.fillStyle = '#f3f4f6';
-  ctx.fillRect(400, 200, 1800, 80);
-  ctx.fillStyle = '#1f2937';
-  ctx.font = 'bold 50px "Microsoft YaHei"';
-  ctx.textAlign = 'center';
-  ctx.fillText('正在演示：启明3D虚拟课堂交互教程', 1300, 255);
-
-  const texture = new THREE.CanvasTexture(canvas);
+  // 使用外部贴图作为电脑界面
+  const loader = new THREE.TextureLoader();
+  const texture = loader.load('/textures/ac1f6785-8a67-40b3-8283-b0d9f4479b8e.png');
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 16;
 
   const screenMat = new THREE.MeshStandardMaterial({
@@ -693,57 +779,17 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
   // 2. 窗外风景（使用真实纹理）
   const sceneLoader = new THREE.TextureLoader();
 
-  // 天空背景
-  const skyTex = sceneLoader.load('/textures/FullskiesSunset0027_1_L.jpg');
-  skyTex.colorSpace = THREE.SRGBColorSpace;
-  const skyPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(D * 4, H * 4),
-    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.DoubleSide })
-  );
-  skyPlane.rotation.y = Math.PI / 2;
-  skyPlane.position.set(wallX - 20, H * 0.8, -D / 2);
-  group.add(skyPlane);
-
-  // 草地
-  const grassTex = sceneLoader.load('/textures/Grass0002_2_L.jpg');
-  grassTex.colorSpace = THREE.SRGBColorSpace;
-  grassTex.wrapS = THREE.RepeatWrapping;
-  grassTex.wrapT = THREE.RepeatWrapping;
-  grassTex.repeat.set(6, 6);
-  const grassPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(25, D * 2),
-    new THREE.MeshBasicMaterial({ map: grassTex })
-  );
-  grassPlane.rotation.x = -Math.PI / 2;
-  grassPlane.position.set(wallX - 12, -0.05, -D / 2);
-  group.add(grassPlane);
-
-  // 小路
-  const roadTex = sceneLoader.load('/textures/Roads0086_33_L.jpg');
-  roadTex.colorSpace = THREE.SRGBColorSpace;
-  roadTex.wrapS = THREE.RepeatWrapping;
-  roadTex.wrapT = THREE.RepeatWrapping;
-  roadTex.repeat.set(1, 4);
-  const roadPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.5, D * 2),
-    new THREE.MeshBasicMaterial({ map: roadTex })
-  );
-  roadPlane.rotation.x = -Math.PI / 2;
-  roadPlane.position.set(wallX - 4, -0.02, -D / 2);
-  group.add(roadPlane);
-
-  // 树木（Billboard）
+  // 中景：树木（窗外 3~5m，不与天空重叠）
   const treeFiles = [
     '/textures/Trees0030_M.png',
-    '/textures/Trees0037_M.png',
-    '/textures/Trees0046_M.png'
+    '/textures/Trees0037_M.png'
   ];
   const treePositions = [
-    { x: wallX - 3, z: -2, scale: 4.5 },
-    { x: wallX - 7, z: -5, scale: 6 },
-    { x: wallX - 4.5, z: -8, scale: 5 },
-    { x: wallX - 9, z: -3.5, scale: 4 },
-    { x: wallX - 8, z: -7, scale: 5.5 },
+    { x: wallX - 5.0, z: -1.5, scale: 5.0 },
+    { x: wallX - 6.1, z: -5.0, scale: 5.0 },
+    { x: wallX - 4.5, z: -8.5, scale: 5.0 },
+    { x: wallX - 7.0, z: -3.5, scale: 5.0 },
+    { x: wallX - 6.2, z: -7.0, scale: 5.0 },
   ];
   treePositions.forEach((pos, i) => {
     const treeTex = sceneLoader.load(treeFiles[i % treeFiles.length]);
@@ -753,9 +799,38 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
       new THREE.MeshBasicMaterial({ map: treeTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide })
     );
     treePlane.rotation.y = Math.PI / 2;
-    treePlane.position.set(pos.x, pos.scale / 2, pos.z);
+    // 将树木深度埋入地下一点 (从 -0.1 改为 -0.4)，防止因贴图边缘透明导致的悬空感
+    treePlane.position.set(pos.x, pos.scale / 2 - 0.4, pos.z);
     group.add(treePlane);
   });
+
+  // 近景：地面（草地 + 小路，水平铺在地上，从墙外往外延伸）
+  const grassTex = sceneLoader.load('/textures/Grass0002_2_L.jpg');
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+  grassTex.wrapS = THREE.RepeatWrapping;
+  grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.repeat.set(4, 4);
+  const grassPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, D + 2),
+    new THREE.MeshBasicMaterial({ map: grassTex })
+  );
+  grassPlane.rotation.x = -Math.PI / 2;
+  grassPlane.position.set(wallX - 4, -0.1, -D / 2);
+  group.add(grassPlane);
+
+  // 小路（在草地上方一点点，避免Z-fighting）
+  const roadTex = sceneLoader.load('/textures/Roads0086_33_L.jpg');
+  roadTex.colorSpace = THREE.SRGBColorSpace;
+  roadTex.wrapS = THREE.RepeatWrapping;
+  roadTex.wrapT = THREE.RepeatWrapping;
+  roadTex.repeat.set(1, 4);
+  const roadPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.5, D + 2),
+    new THREE.MeshBasicMaterial({ map: roadTex })
+  );
+  roadPlane.rotation.x = -Math.PI / 2;
+  roadPlane.position.set(wallX - 2, -0.05, -D / 2);
+  group.add(roadPlane);
 
   // 3. 循环创建玻璃、窗框及附件
   for (let i = 0; i < windowCount; i++) {
@@ -777,7 +852,19 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
     group.add(hFrame2);
 
     // 大理石台板
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, winW + 0.2), new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.1 }));
+    const sillTex = new THREE.TextureLoader().load('/textures/ScreenShot_2026-02-07_014014_472.png');
+    sillTex.colorSpace = THREE.SRGBColorSpace;
+    // 使用平铺（RepeatWrapping）防止贴图被拉伸，长条状窗台重复使用纹理
+    sillTex.wrapS = THREE.RepeatWrapping;
+    sillTex.wrapT = THREE.RepeatWrapping;
+    sillTex.repeat.set(2, 1); 
+
+    const sillMat = new THREE.MeshStandardMaterial({ 
+      map: sillTex,
+      roughness: 0.2,
+      metalness: 0.1
+    });
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, winW + 0.2), sillMat);
     sill.position.set(wallX + 0.15, winY - winH / 2 - 0.02, winZ);
     group.add(sill);
 
@@ -873,7 +960,18 @@ function createRightWall(parent, W, H, D, wallMat) {
   const winY = 1.8;
   const winDepth = 0.4;
   
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.1, winW), new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.1 }));
+  const sillTex = new THREE.TextureLoader().load('/textures/ScreenShot_2026-02-07_014014_472.png');
+  sillTex.colorSpace = THREE.SRGBColorSpace;
+  // 飘窗较长，增加平铺次数防止拉伸
+  sillTex.wrapS = THREE.RepeatWrapping;
+  sillTex.wrapT = THREE.RepeatWrapping;
+  sillTex.repeat.set(3, 1);
+
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.1, winW), new THREE.MeshStandardMaterial({ 
+    map: sillTex,
+    roughness: 0.2,
+    metalness: 0.1
+  }));
   sill.position.set(wallX - winDepth/2, 1.0, -5.0);
   group.add(sill);
   
@@ -903,55 +1001,15 @@ function createRightWall(parent, W, H, D, wallMat) {
   // 右侧风景（使用真实纹理）
   const sceneLoader = new THREE.TextureLoader();
 
-  // 天空背景（黄昏）
-  const skyTexR = sceneLoader.load('/textures/FullskiesDusk0030_1_L.jpg');
-  skyTexR.colorSpace = THREE.SRGBColorSpace;
-  const skyPlaneR = new THREE.Mesh(
-    new THREE.PlaneGeometry(D * 4, H * 4),
-    new THREE.MeshBasicMaterial({ map: skyTexR, side: THREE.DoubleSide })
-  );
-  skyPlaneR.rotation.y = -Math.PI / 2;
-  skyPlaneR.position.set(wallX + 20, H * 0.8, -D / 2);
-  group.add(skyPlaneR);
-
-  // 草地
-  const grassTexR = sceneLoader.load('/textures/Grass0002_2_L.jpg');
-  grassTexR.colorSpace = THREE.SRGBColorSpace;
-  grassTexR.wrapS = THREE.RepeatWrapping;
-  grassTexR.wrapT = THREE.RepeatWrapping;
-  grassTexR.repeat.set(6, 6);
-  const grassPlaneR = new THREE.Mesh(
-    new THREE.PlaneGeometry(25, D * 2),
-    new THREE.MeshBasicMaterial({ map: grassTexR })
-  );
-  grassPlaneR.rotation.x = -Math.PI / 2;
-  grassPlaneR.position.set(wallX + 12, -0.05, -D / 2);
-  group.add(grassPlaneR);
-
-  // 小路
-  const roadTexR = sceneLoader.load('/textures/Roads0086_33_L.jpg');
-  roadTexR.colorSpace = THREE.SRGBColorSpace;
-  roadTexR.wrapS = THREE.RepeatWrapping;
-  roadTexR.wrapT = THREE.RepeatWrapping;
-  roadTexR.repeat.set(1, 4);
-  const roadPlaneR = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.5, D * 2),
-    new THREE.MeshBasicMaterial({ map: roadTexR })
-  );
-  roadPlaneR.rotation.x = -Math.PI / 2;
-  roadPlaneR.position.set(wallX + 5, -0.02, -D / 2);
-  group.add(roadPlaneR);
-
-  // 树木（Billboard）
+  // 中景：树木（窗外 3~5m）
   const treeFilesR = [
-    '/textures/Trees0046_M.png',
     '/textures/Trees0037_M.png',
     '/textures/Trees0030_M.png'
   ];
   const treePosR = [
-    { x: wallX + 3, z: -3, scale: 4.5 },
-    { x: wallX + 8, z: -6, scale: 6 },
-    { x: wallX + 5.5, z: -9, scale: 5 },
+    { x: wallX + 5.1, z: -4.0, scale: 5.0 },
+    { x: wallX + 6.0, z: -6.5, scale: 5.0 },
+    { x: wallX + 4.5, z: -8.5, scale: 5.0 },
   ];
   treePosR.forEach((pos, i) => {
     const tTex = sceneLoader.load(treeFilesR[i % treeFilesR.length]);
@@ -961,9 +1019,38 @@ function createRightWall(parent, W, H, D, wallMat) {
       new THREE.MeshBasicMaterial({ map: tTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide })
     );
     tPlane.rotation.y = -Math.PI / 2;
-    tPlane.position.set(pos.x, pos.scale / 2, pos.z);
+    // 将树木深度埋入地下一点 (从 -0.1 改为 -0.4)，防止因贴图边缘透明导致的悬空感
+    tPlane.position.set(pos.x, pos.scale / 2 - 0.4, pos.z);
     group.add(tPlane);
   });
+
+  // 近景：草地
+  const grassTexR = sceneLoader.load('/textures/Grass0002_2_L.jpg');
+  grassTexR.colorSpace = THREE.SRGBColorSpace;
+  grassTexR.wrapS = THREE.RepeatWrapping;
+  grassTexR.wrapT = THREE.RepeatWrapping;
+  grassTexR.repeat.set(4, 4);
+  const grassPlaneR = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, D + 2),
+    new THREE.MeshBasicMaterial({ map: grassTexR })
+  );
+  grassPlaneR.rotation.x = -Math.PI / 2;
+  grassPlaneR.position.set(wallX + 4, -0.1, -D / 2);
+  group.add(grassPlaneR);
+
+  // 小路
+  const roadTexR = sceneLoader.load('/textures/Roads0086_33_L.jpg');
+  roadTexR.colorSpace = THREE.SRGBColorSpace;
+  roadTexR.wrapS = THREE.RepeatWrapping;
+  roadTexR.wrapT = THREE.RepeatWrapping;
+  roadTexR.repeat.set(1, 4);
+  const roadPlaneR = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.5, D + 2),
+    new THREE.MeshBasicMaterial({ map: roadTexR })
+  );
+  roadPlaneR.rotation.x = -Math.PI / 2;
+  roadPlaneR.position.set(wallX + 2, -0.05, -D / 2);
+  group.add(roadPlaneR);
 
   parent.add(group);
 }
@@ -989,9 +1076,9 @@ function createWindowLights(scene, W, H, D) {
 
   for (let i = 0; i < windowCount; i++) {
     const winZ = -(i + 1) * winSpacing;
-    const light = new THREE.PointLight(0xffffee, 0.3, 10);
-    light.position.set(-W / 2 + 0.1, 2.0, winZ);
-    // 增加一点漫反射感，不投影（投影交给 Sunlight）
+    // 光源放在窗外（墙壁外侧），对准窗口正中心
+    const light = new THREE.PointLight(0xffffee, 0.4, 12);
+    light.position.set(-W / 2 - 0.5, 1.9, winZ);
     scene.add(light);
   }
 }
@@ -1027,29 +1114,42 @@ function createCabinet(parent, W, D) {
   const zPos = -cabD / 2 - 0.05; // 紧贴后墙 (Z=0)
 
   for (let i = 0; i < count; i++) {
-    const group = new THREE.Group();
     const x = startX + i * cabW;
 
     // 柜体
     const body = new THREE.Mesh(new THREE.BoxGeometry(cabW, cabH, cabD), mat);
     body.position.set(x, cabH / 2, zPos);
-    group.add(body);
+    parent.add(body);
 
-    // 柜门分隔线
-    const line = new THREE.Mesh(new THREE.BoxGeometry(0.01, cabH - 0.1, cabD + 0.02), lineMat);
-    line.position.set(x, cabH / 2, zPos);
-    group.add(line);
-
-    // 门把手
-    const handleL = new THREE.Mesh(new THREE.SphereGeometry(0.02), handleMat);
-    handleL.position.set(x - 0.1, cabH * 0.6, zPos + cabD / 2);
-    group.add(handleL);
+    // 创建小储物格的线（2列 x 3层 = 6个小格子）
+    const cols = 2;
+    const rows = 3;
     
-    const handleR = handleL.clone();
-    handleR.position.x = x + 0.1;
-    group.add(handleR);
+    // 垂直分隔线
+    for (let c = 0; c <= cols; c++) {
+      const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.01, cabH, 0.01), lineMat);
+      vLine.position.set(x - cabW/2 + c*(cabW/cols), cabH/2, zPos + cabD/2 + 0.005);
+      parent.add(vLine);
+    }
+    
+    // 水平分隔线
+    for (let r = 0; r <= rows; r++) {
+      const hLine = new THREE.Mesh(new THREE.BoxGeometry(cabW, 0.01, 0.01), lineMat);
+      hLine.position.set(x, r*(cabH/rows), zPos + cabD/2 + 0.005);
+      parent.add(hLine);
+    }
 
-    parent.add(group);
+    // 为每个小格子添加把手
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const handle = new THREE.Mesh(new THREE.SphereGeometry(0.015), handleMat);
+        // 把手位置在每个格子的右上角一点
+        const hX = x - cabW/2 + (c + 0.8) * (cabW/cols);
+        const hY = (r + 0.5) * (cabH/rows);
+        handle.position.set(hX, hY, zPos + cabD/2 + 0.01);
+        parent.add(handle);
+      }
+    }
   }
 }
 

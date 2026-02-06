@@ -20,7 +20,7 @@ const camera = new THREE.PerspectiveCamera(
   100.0
 );
 // 设置初始视角在第二排中心学生位置 (模拟坐姿高度)
-camera.position.set(0, 1.15, -4.4);
+camera.position.set(0, 1.15, -4.9);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -34,13 +34,16 @@ renderer.toneMappingExposure = 1.0; // 降低曝光度回到标准水平
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.screenSpacePanning = true;
-// 设置控制器中心为老师的位置或黑板中心
-controls.target.set(0.0, 1.25, -10.0);
-// 锁定缩放范围，防止穿墙
-controls.minDistance = 0.5;
-controls.maxDistance = 8.5;
+// 控制器目标放在相机正前方一小段距离，让 OrbitControls 能正常旋转
+controls.target.set(0, 1.15, -5.0);
+// 禁止缩放和平移，只允许鼠标拖拽旋转视角
+controls.enableZoom = false;
+controls.enablePan = false;
+controls.rotateSpeed = 0.5;
 controls.update();
+
+// 锁定的相机坐标（第二排中间位置）
+const fixedCameraPos = new THREE.Vector3(0, 1.15, -4.9);
 
 // 灯光设置
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -214,16 +217,16 @@ function animate() {
 
   const deltaTime = clock.getDelta();
 
+  // 将相机锁定在第二排位置，只允许旋转不允许平移
+  const offset = camera.position.clone().sub(controls.target).normalize().multiplyScalar(0.1);
+  camera.position.copy(fixedCameraPos);
+  controls.target.copy(fixedCameraPos).sub(offset);
+  controls.update();
+
   if (currentVRM) {
     // 关键：更新物理（头发、裙子）和表情
     currentVRM.update(deltaTime);
   }
-
-  // --- 空气墙逻辑：限制相机在办公室内 ---
-  // X: [-5.8, 5.8], Y: [0.1, 3.4], Z: [-9.8, -0.2]
-  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -5.8, 5.8);
-  camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.1, 3.4);
-  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -9.8, -0.2);
 
   composer.render();
 }
