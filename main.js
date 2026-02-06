@@ -19,8 +19,8 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   100.0
 );
-// 设置初始视角在第二排中心学生位置，稍微后移并调整角度以看见一侧
-camera.position.set(2, 1.4, -4.5);
+// 设置初始视角在教室内，看向 Z=0 墙面的黑板
+camera.position.set(0, 1.15, -4.9);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -34,15 +34,15 @@ renderer.toneMappingExposure = 1.0; // 降低曝光度回到标准水平
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-// 控制器目标放在相机正前方一小段距离，让 OrbitControls 能正常旋转
-controls.target.set(0, 1.15, -5.0);
+// 目标看向黑板方向 (Z=0)
+controls.target.set(0, 1.15, 0);
 // 禁止缩放和平移，只允许鼠标拖拽旋转视角
 controls.enableZoom = false;
 controls.enablePan = false;
 controls.rotateSpeed = 0.5;
 controls.update();
 
-// 锁定的相机坐标（第二排中间位置）
+// 锁定的相机坐标 (在教室内看向黑板)
 const fixedCameraPos = new THREE.Vector3(0, 1.15, -4.9);
 
 // 灯光设置

@@ -591,31 +591,31 @@ function createPodium(parent, D) {
   const platform = new THREE.Mesh(platformGeo, platformMat);
   // 旋转：将平面的 XY 旋转到 XZ 轴，使挤出的 depth(pHeight) 变为高度 Y
   platform.rotation.x = -Math.PI / 2;
-  // 位置：底部着地 (y=0)，且紧贴前墙 (z=-D)
-  platform.position.set(0, 0, -D); 
+  // 位置：底部着地 (y=0)；由于 shape 坐标为负 Y，旋转后 platform 延伸至 Z+ 方向
+  // 为了让它从 Z=0 墙面向教室内 (Z-) 延伸，我们将 platform 移至 Z = -1.3
+  platform.position.set(0, 0, -1.3); 
   parent.add(platform);
 
   // 2. 老师讲桌 (直接放在地板上，位于地坪前方)
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), podMat);
-  // 讲桌位置：放置在俯视图倒梯形宽边（前沿）的更前方，底部着地 (y=0.5)
-  // 地坪深度1.3，讲柜中心移至 -D + 1.6，使其后侧边缘 (-D + 1.3) 与地坪前缘严丝合缝
-  body.position.set(0, 0.5, -D + 1.6); 
+  // 讲柜中心移至 Z = -1.6，使其侧边缘 (-1.3) 与地坪前沿严丝合缝
+  body.position.set(0, 0.5, -1.6); 
   parent.add(body);
 
   // 讲台面板（讲桌顶部的倾斜面板）
   const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.7), podMat);
-  top.position.set(0, 1.02, -D + 1.6);
+  top.position.set(0, 1.02, -1.6);
   parent.add(top);
 
   // 3. 讲台面板围挡 (防止物品掉落，U型设计：左、右、前)
   const barrierH = 0.08; // 围挡高度
   const barrierT = 0.02; // 围挡厚度
-  const deskZ = -D + 1.6;
+  const deskZ = -1.6;
   const topSurfaceY = 1.04; // top.y(1.02) + thickness/2(0.02)
 
-  // 前部围挡
+  // 前部围挡 (在讲台前沿，即远离墙壁的一侧)
   const frontBarrier = new THREE.Mesh(new THREE.BoxGeometry(1.3, barrierH, barrierT), podMat);
-  frontBarrier.position.set(0, topSurfaceY + barrierH / 2, deskZ + 0.35 - barrierT / 2);
+  frontBarrier.position.set(0, topSurfaceY + barrierH / 2, deskZ - 0.35 + barrierT / 2);
   parent.add(frontBarrier);
 
   // 左侧围挡
