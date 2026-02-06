@@ -594,36 +594,42 @@ function createClock(parent, D) {
 }
 
 /**
- * 校训文字
+ * 校训文字（分块显示）
  */
 function createSchoolMotto(parent, D) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = 1024;
-  canvas.height = 128;
+  const createTextPlaque = (text, x) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 512;
+    canvas.height = 128;
 
-  // 背景透明
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 背景透明
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 文字样式
-  ctx.fillStyle = '#cc0000'; // 深红色
-  ctx.font = 'bold 80px "Microsoft YaHei", "SimHei", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+    // 文字样式
+    ctx.fillStyle = '#cc0000'; // 深红色
+    // 换成宋体系列，更有书卷气和正式感
+    ctx.font = 'bold 85px "SimSun", "STSong", "Songti SC", "NSimSun", serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-  // 绘制文字
-  ctx.fillText('爱 国  敬 业  求 实  创 新', canvas.width / 2, canvas.height / 2);
+    // 绘制文字
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  const material = new THREE.MeshBasicMaterial({ 
-    map: texture, 
-    transparent: true,
-    side: THREE.FrontSide 
-  });
-  const geometry = new THREE.PlaneGeometry(4, 0.5);
-  const mesh = new THREE.Mesh(geometry, material);
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.MeshBasicMaterial({ 
+      map: texture, 
+      transparent: true,
+      side: THREE.FrontSide 
+    });
+    const geometry = new THREE.PlaneGeometry(1.8, 0.45);
+    const mesh = new THREE.Mesh(geometry, material);
 
-  // 位置：前墙正中央上方 (黑板和一体机区域 x: [-3.1, 3.1], 中心 x=0)
-  mesh.position.set(0, 3.0, -D + 0.01);
-  parent.add(mesh);
+    mesh.position.set(x, 3.0, -D + 0.01);
+    parent.add(mesh);
+  };
+
+  // 分成两块显示，增加间距
+  createTextPlaque('爱 国 敬 业', -1.2);
+  createTextPlaque('求 实 创 新', 1.2);
 }
