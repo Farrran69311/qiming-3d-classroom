@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { createClassroom } from './classroom.js';
 
 // --- 1. 基础场景初始化 ---
@@ -179,7 +180,11 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
-// 3. 输出通道 (必须放在最后，处理颜色空间转换)
+// 3. 抗锯齿通道 (SMAA) - 解决开启后期处理后直线变毛刺/分断的问题
+const smaaPass = new SMAAPass(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio);
+composer.addPass(smaaPass);
+
+// 4. 输出通道 (必须放在最后，处理颜色空间转换)
 const outputPass = new OutputPass();
 composer.addPass(outputPass);
 
@@ -218,4 +223,5 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  smaaPass.setSize(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio);
 });
