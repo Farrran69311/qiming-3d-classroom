@@ -14,7 +14,7 @@ export function createClassroom(scene) {
   const H = 3.5;    // 高度 (Y)
 
   // ====== 材质定义 ======
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xfaf3e0, side: THREE.DoubleSide }); // 米黄色墙壁
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }); // 白色墙壁
   const floorMat = createFloorMaterial();           // 带网格的地板
   const ceilingMat = createCeilingMaterial();       // 办公室风格石膏板天花板
 
@@ -86,6 +86,9 @@ export function createClassroom(scene) {
 
   // ====== 顶灯 (Ceiling Lights) ======
   addCeilingLamps(classroom, W, H, D);
+
+  // ====== 广播喇叭 (Speakers) ======
+  addBroadcasters(classroom, W, D);
 
   scene.add(classroom);
   return classroom;
@@ -275,12 +278,17 @@ function createBlackboard(parent, D) {
 function createSmartDisplay(parent, D) {
   const group = new THREE.Group();
 
-  // 16:9 标准比例：宽度 2.8, 高度 1.575
+  // 与黑板总高度（含边框）对齐：1.775 + 0.06 * 2 = 1.895
+  const boardH = 1.775;
+  const frameThickness = 0.06;
+  const totalH = boardH + frameThickness * 2;
+
+  // 16:9 标准屏幕比例
   const screenW = 2.8;
   const screenH = screenW * (9 / 16);
-  const shellW = screenW + 0.2;
-  const shellH = screenH + 0.2;
-  const centerX = 0; // 居中展示
+  const shellW = 3.0; // 与黑板间隙严丝合缝
+  const shellH = totalH; // 上下对齐
+  const centerX = 0; 
   
   // 屏幕外壳
   const shellMat = new THREE.MeshStandardMaterial({ 
@@ -362,10 +370,11 @@ function createSmartDisplay(parent, D) {
  * 讲台（包含地面抬高的台基和老师用的讲桌）
  */
 function createPodium(parent, D) {
-  const woodMat = new THREE.MeshStandardMaterial({ color: 0xb8860b }); // 讲桌木色
+  const podMat = new THREE.MeshStandardMaterial({ color: 0xf2ead3 }); // 讲台主体更明显的米色（奶油/象牙白）
   const platformMat = new THREE.MeshStandardMaterial({ 
-    color: 0x5d4037, // 讲台地基深咖啡色
-    roughness: 0.9 
+    color: 0x8b4513, // 讲台地基褐色木质感
+    roughness: 0.8,
+    metalness: 0.1
   }); 
 
   // 1. 讲台地坪 (俯视图梯形：绝大部分为直边，仅前端带小切角防止绊倒)
@@ -402,17 +411,37 @@ function createPodium(parent, D) {
   parent.add(platform);
 
   // 2. 老师讲桌 (直接放在地板上，位于地坪前方)
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), woodMat);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), podMat);
   // 讲桌位置：放置在俯视图倒梯形宽边（前沿）的更前方，底部着地 (y=0.5)
   // 地坪深度1.3，讲柜中心移至 -D + 1.6，使其后侧边缘 (-D + 1.3) 与地坪前缘严丝合缝
   body.position.set(0, 0.5, -D + 1.6); 
   parent.add(body);
 
   // 讲台面板（讲桌顶部的倾斜面板）
-  const topMat = new THREE.MeshStandardMaterial({ color: 0xcd9b1d });
-  const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.7), topMat);
-  top.position.set(0, 1.01, -D + 1.6);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.7), podMat);
+  top.position.set(0, 1.02, -D + 1.6);
   parent.add(top);
+
+  // 3. 讲台面板围挡 (防止物品掉落，U型设计：左、右、前)
+  const barrierH = 0.08; // 围挡高度
+  const barrierT = 0.02; // 围挡厚度
+  const deskZ = -D + 1.6;
+  const topSurfaceY = 1.04; // top.y(1.02) + thickness/2(0.02)
+
+  // 前部围挡
+  const frontBarrier = new THREE.Mesh(new THREE.BoxGeometry(1.3, barrierH, barrierT), podMat);
+  frontBarrier.position.set(0, topSurfaceY + barrierH / 2, deskZ + 0.35 - barrierT / 2);
+  parent.add(frontBarrier);
+
+  // 左侧围挡
+  const leftBarrier = new THREE.Mesh(new THREE.BoxGeometry(barrierT, barrierH, 0.7), podMat);
+  leftBarrier.position.set(-0.65 + barrierT / 2, topSurfaceY + barrierH / 2, deskZ);
+  parent.add(leftBarrier);
+
+  // 右侧围挡
+  const rightBarrier = new THREE.Mesh(new THREE.BoxGeometry(barrierT, barrierH, 0.7), podMat);
+  rightBarrier.position.set(0.65 - barrierT / 2, topSurfaceY + barrierH / 2, deskZ);
+  parent.add(rightBarrier);
 }
 
 /**
@@ -986,45 +1015,63 @@ function createClock(parent, D) {
  * 校训文字（分块显示）
  */
 function createSchoolMotto(parent, D) {
-  const createTextPlaque = (text, x) => {
+  const create3DText = (text, x) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 128;
+    // 增加画布宽度，防止文字边缘被切断
+    canvas.width = 1024;
+    canvas.height = 256;
 
-    // 背景透明
+    // 背景完全透明
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // 文字样式
-    ctx.fillStyle = '#cc0000'; // 深红色
-    // 维持宋体的细长笔画特征，但通过加粗字体和描边来增强视觉冲击力
-    ctx.font = 'bold 95px "SimSun", "STSong", "Songti SC", "NSimSun", serif';
+    const textColor = '#cc0000';
+    ctx.fillStyle = textColor;
+    // 稍微缩小字体比例，留出左右安全边距
+    ctx.font = 'bold 160px "SimSun", "STSong", "Songti SC", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // 通过描边技术人工加粗宋体笔画
-    ctx.strokeStyle = '#cc0000';
-    ctx.lineWidth = 3;
+    // 描边加粗
+    ctx.strokeStyle = textColor;
+    ctx.lineWidth = 6;
     ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
-    // 绘制填充
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.MeshBasicMaterial({ 
-      map: texture, 
-      transparent: true,
-      side: THREE.FrontSide 
-    });
-    const geometry = new THREE.PlaneGeometry(1.8, 0.45);
-    const mesh = new THREE.Mesh(geometry, material);
+    const group = new THREE.Group();
 
-    mesh.position.set(x, 3.0, -D + 0.01);
-    parent.add(mesh);
+    // 每一块文字的几何体尺寸 (加大宽度到 2.4，高度 0.6)
+    const geometry = new THREE.PlaneGeometry(2.4, 0.6);
+    
+    // 采用“层叠法”实现镂空立体字效果
+    const layers = 12;
+    const depth = 0.05; 
+    
+    for (let i = 0; i < layers; i++) {
+        const isFront = i === layers - 1;
+        const material = new THREE.MeshStandardMaterial({
+            map: texture,
+            transparent: true,
+            color: isFront ? 0xffffff : 0x880000, 
+            metalness: 0.2,
+            roughness: 0.5,
+            alphaTest: 0.1
+        });
+
+        const layerMesh = new THREE.Mesh(geometry, material);
+        layerMesh.position.z = (i / layers) * depth;
+        group.add(layerMesh);
+    }
+
+    group.position.set(x, 3.0, -D + 0.01);
+    parent.add(group);
   };
 
-  // 分成两块显示，增加间距
-  createTextPlaque('爱 国 敬 业', -1.2);
-  createTextPlaque('求 实 创 新', 1.2);
+  // 调整位置，给加宽后的文字留出空间
+  create3DText('爱 国 敬 业', -1.5);
+  create3DText('求 实 创 新', 1.5);
 }
 
 /**
@@ -1132,4 +1179,43 @@ function fillShelfWithBooks(group, yPos, shelfW, shelfD) {
     spine.rotation.z = tilt;
     group.add(spine);
   }
+}
+
+/**
+ * 添加广播喇叭
+ */
+function addBroadcasters(parent, W, D) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0 }); // 浅灰色外壳
+  const grillMat = new THREE.MeshStandardMaterial({ color: 0x444444 }); // 深灰色网罩
+
+  const createSpeaker = (x) => {
+    const sGroup = new THREE.Group();
+    
+    // 喇叭箱体
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.2), bodyMat);
+    sGroup.add(body);
+    
+    // 正面网罩 (稍微出来一点点)
+    const grill = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.38), grillMat);
+    grill.position.z = 0.101;
+    sGroup.add(grill);
+
+    // 支架 (连接墙壁)
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.1), bodyMat);
+    bracket.position.z = -0.12;
+    sGroup.add(bracket);
+
+    sGroup.position.set(x, 3.1, -D + 0.15);
+    // 稍微向下倾斜，对准下方学生
+    sGroup.rotation.x = Math.PI / 10;
+    
+    group.add(sGroup);
+  };
+
+  // 放在校训的两侧，距离稍远 (约 4m 处)
+  createSpeaker(-4.0);
+  createSpeaker(4.0);
+
+  parent.add(group);
 }

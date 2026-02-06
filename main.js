@@ -9,7 +9,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { createClassroom } from './classroom.js';
 
-// --- 1. 基础场景初始化 ---
+// --- 1.基础场景初始化 ---
 
 const scene = new THREE.Scene();
 
@@ -19,12 +19,13 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   100.0
 );
-// 设置初始视角在教室内（偏后方看向讲台）
-camera.position.set(0, 1.8, -1.5);
+// 设置初始视角在第二排中心学生位置 (模拟坐姿高度)
+camera.position.set(0, 1.15, -4.4);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+// 限制像素比最大为 2，防止高分屏下过度锐化导致远端闪烁
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 软阴影
@@ -34,8 +35,8 @@ document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.screenSpacePanning = true;
-// 设置控制器中心为老师的位置
-controls.target.set(0.0, 1.3, -9.0);
+// 设置控制器中心为老师的位置或黑板中心
+controls.target.set(0.0, 1.25, -10.0);
 // 锁定缩放范围，防止穿墙
 controls.minDistance = 0.5;
 controls.maxDistance = 8.5;
@@ -127,6 +128,19 @@ function loadVRM(url) {
       // 针对 VRM 0.x 的旋转修正
       VRMUtils.rotateVRM0(vrm);
 
+      // 优化贴图：开启各向异性过滤及 Mipmap，解决远距离物体过于“锐化”或闪烁的问题
+      vrm.scene.traverse((obj) => {
+        if (obj.isMesh) {
+          const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+          materials.forEach(mat => {
+            if (mat.map) {
+              mat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+              mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+            }
+          });
+        }
+      });
+
       // 设置基础姿势：放下双臂
       setBasePose(vrm);
       
@@ -158,8 +172,8 @@ if (selector) {
 const resetBtn = document.getElementById('reset-view-btn');
 if (resetBtn) {
   resetBtn.addEventListener('click', () => {
-    camera.position.set(0, 1.8, -1.5);
-    controls.target.set(0.0, 1.3, -9.0);
+    camera.position.set(0, 1.15, -4.4);
+    controls.target.set(0.0, 1.25, -10.0);
     controls.update();
   });
 }
@@ -219,9 +233,10 @@ animate();
 // --- 5. 窗口尺寸适配 ---
 
 window.addEventListener('resize', () => {
+  const pixelRatio = Math.min(window.devicePixelRatio, 2);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
-  smaaPass.setSize(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio);
+  smaaPass.setSize(window.innerWidth * pixelRatio, window.innerHeight * pixelRatio);
 });
