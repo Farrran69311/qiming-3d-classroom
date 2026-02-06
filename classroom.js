@@ -288,20 +288,31 @@ function createSmartDisplay(parent, D) {
 }
 
 /**
- * 讲台
+ * 讲台（包含地面抬高的台基和老师用的讲桌）
  */
 function createPodium(parent, D) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb8860b }); // 深金色木头
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0xb8860b }); // 深金色木头
+  const platformMat = new THREE.MeshStandardMaterial({ color: 0xdddddd }); // 浅灰色或与地板接近的石材色
 
+  // 1. 讲台地坪 (抬高部分)
+  // 宽度覆盖教室前端，高度约 0.15m
+  const pWidth = 10; // 宽度比教室略窄一点
+  const pHeight = 0.15;
+  const pDepth = 1.8;
+  const platform = new THREE.Mesh(new THREE.BoxGeometry(pWidth, pHeight, pDepth), platformMat);
+  platform.position.set(0, pHeight / 2, -D + pDepth / 2);
+  parent.add(platform);
+
+  // 2. 老师讲桌 (放在地坪上)
   // 讲台主体
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), mat);
-  body.position.set(0, 0.5, -D + 1.2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), woodMat);
+  body.position.set(0, pHeight + 0.5, -D + 1.2);
   parent.add(body);
 
   // 讲台面板（倾斜的顶部）
   const topMat = new THREE.MeshStandardMaterial({ color: 0xcd9b1d });
   const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.7), topMat);
-  top.position.set(0, 1.01, -D + 1.2);
+  top.position.set(0, pHeight + 1.01, -D + 1.2);
   parent.add(top);
 }
 
