@@ -223,6 +223,12 @@ function createCeilingMaterial() {
  */
 function createBlackboard(parent, D) {
   const group = new THREE.Group();
+  const loader = new THREE.TextureLoader();
+
+  // 加载黑板素材
+  const handwritingTex = loader.load('/textures/blackboard/chalkhandwriting.png');
+  const scheduleTex = loader.load('/textures/blackboard/schedule.png');
+
   const boardMat = new THREE.MeshStandardMaterial({ color: 0x2d5016 }); // 深绿色
   const frameMat = new THREE.MeshStandardMaterial({ color: 0x8B7355 }); // 棕色木框
 
@@ -232,11 +238,27 @@ function createBlackboard(parent, D) {
   const frameThickness = 0.06;
 
   // 辅助函数：创建一个黑板块
-  const createBoardPart = (x, width) => {
+  const createBoardPart = (x, width, texture) => {
     // 黑板面
     const board = new THREE.Mesh(new THREE.BoxGeometry(width, boardH, 0.05), boardMat);
     board.position.set(x, boardY, -D + 0.03);
     group.add(board);
+
+    // 如果有贴图（手写或课程表），在黑板面前方添加一个贴图层
+    if (texture) {
+      // 保持贴图比例，或者简单铺满。这里采用稍微缩小的方案留白
+      const texPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(width * 0.9, boardH * 0.85),
+        new THREE.MeshStandardMaterial({ 
+          map: texture, 
+          transparent: true,
+          roughness: 0.8
+        })
+      );
+      // 0.03 (中心) + 0.025 (厚度一半) + 0.001 (间隙) = 0.056
+      texPlane.position.set(x, boardY, -D + 0.056);
+      group.add(texPlane);
+    }
 
     // 上边框
     const frameTop = new THREE.Mesh(new THREE.BoxGeometry(width, frameThickness, 0.08), frameMat);
@@ -256,15 +278,14 @@ function createBlackboard(parent, D) {
     return { leftBound: x - width/2, rightBound: x + width/2 };
   };
 
-  // 一体机壳宽度为3.0，中心为0 -> 边缘为 -1.5 和 1.5
-  // 左黑板：紧贴一体机左侧 (x = -1.5 - 1.2 = -2.7, 宽度2.4)
-  const leftSide = createBoardPart(-2.7, 2.4);
+  // 左黑板：放置手写粉笔字
+  const leftSide = createBoardPart(-2.7, 2.4, handwritingTex);
   const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, boardH + frameThickness * 2, 0.08), frameMat);
   frameLeft.position.set(leftSide.leftBound, boardY, -D + 0.03);
   group.add(frameLeft);
 
-  // 右黑板：紧贴一体机右侧 (x = 1.5 + 1.2 = 2.7, 宽度2.4)
-  const rightSide = createBoardPart(2.7, 2.4);
+  // 右黑板：放置课程表
+  const rightSide = createBoardPart(2.7, 2.4, scheduleTex);
   const frameRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, boardH + frameThickness * 2, 0.08), frameMat);
   frameRight.position.set(rightSide.rightBound, boardY, -D + 0.03);
   group.add(frameRight);
