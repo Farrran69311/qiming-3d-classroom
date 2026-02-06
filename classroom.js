@@ -177,64 +177,140 @@ function createCeilingMaterial() {
  */
 function createBlackboard(parent, D) {
   const group = new THREE.Group();
-
-  // 黑板面 (宽度4, 高度1.5, 中心 x=-1.1) -> 范围 [-3.1, 0.9]
   const boardMat = new THREE.MeshStandardMaterial({ color: 0x2d5016 }); // 深绿色
-  const board = new THREE.Mesh(new THREE.BoxGeometry(4, 1.5, 0.05), boardMat);
-  board.position.set(-1.1, 1.8, -D + 0.03);
-  group.add(board);
-
-  // 黑板边框
   const frameMat = new THREE.MeshStandardMaterial({ color: 0x8B7355 }); // 棕色木框
-  
-  // 上边框 (不对齐一体机侧，宽度设为4)
-  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.06, 0.08), frameMat);
-  frameTop.position.set(-1.1, 2.55, -D + 0.03);
-  group.add(frameTop);
 
-  // 下边框
-  const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.06, 0.08), frameMat);
-  frameBottom.position.set(-1.1, 1.05, -D + 0.03);
-  group.add(frameBottom);
+  // 与一体机外壳高度保持一致：1.775
+  const boardH = 1.775;
+  const boardY = 1.8;
+  const frameThickness = 0.06;
 
-  // 左边框
-  const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.56, 0.08), frameMat);
-  frameLeft.position.set(-3.1, 1.8, -D + 0.03);
+  // 辅助函数：创建一个黑板块
+  const createBoardPart = (x, width) => {
+    // 黑板面
+    const board = new THREE.Mesh(new THREE.BoxGeometry(width, boardH, 0.05), boardMat);
+    board.position.set(x, boardY, -D + 0.03);
+    group.add(board);
+
+    // 上边框
+    const frameTop = new THREE.Mesh(new THREE.BoxGeometry(width, frameThickness, 0.08), frameMat);
+    frameTop.position.set(x, boardY + boardH / 2 + frameThickness / 2, -D + 0.03);
+    group.add(frameTop);
+
+    // 下边框
+    const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(width, frameThickness, 0.08), frameMat);
+    frameBottom.position.set(x, boardY - boardH / 2 - frameThickness / 2, -D + 0.03);
+    group.add(frameBottom);
+
+    // 粉笔槽
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(width, 0.05, 0.12), frameMat);
+    tray.position.set(x, boardY - boardH / 2 - frameThickness, -D + 0.08);
+    group.add(tray);
+    
+    return { leftBound: x - width/2, rightBound: x + width/2 };
+  };
+
+  // 一体机壳宽度为3.0，中心为0 -> 边缘为 -1.5 和 1.5
+  // 左黑板：紧贴一体机左侧 (x = -1.5 - 1.2 = -2.7, 宽度2.4)
+  const leftSide = createBoardPart(-2.7, 2.4);
+  const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, boardH + frameThickness * 2, 0.08), frameMat);
+  frameLeft.position.set(leftSide.leftBound, boardY, -D + 0.03);
   group.add(frameLeft);
 
-  // 移除了右边框，因为它将与一体机接合
-
-  // 粉笔槽 (宽度也改为4)
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.05, 0.12), frameMat);
-  tray.position.set(-1.1, 1.02, -D + 0.08);
-  group.add(tray);
+  // 右黑板：紧贴一体机右侧 (x = 1.5 + 1.2 = 2.7, 宽度2.4)
+  const rightSide = createBoardPart(2.7, 2.4);
+  const frameRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, boardH + frameThickness * 2, 0.08), frameMat);
+  frameRight.position.set(rightSide.rightBound, boardY, -D + 0.03);
+  group.add(frameRight);
 
   parent.add(group);
 }
 
 /**
- * 智能教学一体机（大屏幕）
+ * 智能教学一体机（大屏幕） - 居中 16:9 比例
  */
 function createSmartDisplay(parent, D) {
   const group = new THREE.Group();
 
-  // 屏幕外壳 (统一高度为1.56, 与黑板含边框高度一致, 宽度2.2, 中心 x=2.0) -> 范围 [0.9, 3.1]
-  const shellMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.56, 0.06), shellMat);
-  shell.position.set(2.0, 1.8, -D + 0.04);
+  // 16:9 标准比例：宽度 2.8, 高度 1.575
+  const screenW = 2.8;
+  const screenH = screenW * (9 / 16);
+  const shellW = screenW + 0.2;
+  const shellH = screenH + 0.2;
+  const centerX = 0; // 居中展示
+  
+  // 屏幕外壳
+  const shellMat = new THREE.MeshStandardMaterial({ 
+    color: 0x111111, 
+    roughness: 0.2, 
+    metalness: 0.8 
+  });
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(shellW, shellH, 0.08), shellMat);
+  shell.position.set(centerX, 1.8, -D + 0.04);
   group.add(shell);
 
-  // 屏幕 (高度相应增加)
-  const screenMat = new THREE.MeshStandardMaterial({
-    color: 0x4488ff,
-    emissive: 0x112244,
-    emissiveIntensity: 0.5,
-  });
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.35), screenMat);
-  screen.position.set(2.0, 1.8, -D + 0.08);
-  group.add(screen);
+  // 创建电脑界面纹理 - 维持 16:9 比例分辨率 (2560x1440)
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 2560;
+  canvas.height = 1440;
 
-  // 移除了底部支架，因为它现在是与黑板一体化的墙挂式布局
+  // 背景：Windows 风格
+  const grd = ctx.createLinearGradient(0, 0, 2560, 1440);
+  grd.addColorStop(0, '#004a99');
+  grd.addColorStop(1, '#0078d7');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, 2560, 1440);
+
+  // 任务栏
+  ctx.fillStyle = 'rgba(20, 20, 20, 0.85)';
+  ctx.fillRect(0, 1440 - 80, 2560, 80);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 40px "Microsoft YaHei"';
+  ctx.textAlign = 'center';
+  ctx.fillText('⊞', 1280, 1440 - 30);
+
+  // 模拟桌面图标
+  const drawIcon = (x, y, color, label) => {
+    ctx.fillStyle = color;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, 80, 80, 15);
+      ctx.fill();
+    } else {
+      ctx.fillRect(x, y, 80, 80);
+    }
+    ctx.fillStyle = 'white';
+    ctx.font = '32px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + 40, y + 130);
+  };
+  drawIcon(80, 80, '#ffffff', '此电脑');
+  drawIcon(80, 280, '#ffcc00', '教学课件');
+
+  // 演示窗口
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+  ctx.fillRect(400, 200, 1800, 1000);
+  ctx.fillStyle = '#f3f4f6';
+  ctx.fillRect(400, 200, 1800, 80);
+  ctx.fillStyle = '#1f2937';
+  ctx.font = 'bold 50px "Microsoft YaHei"';
+  ctx.textAlign = 'center';
+  ctx.fillText('正在演示：启明3D虚拟课堂交互教程', 1300, 255);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 16;
+
+  const screenMat = new THREE.MeshStandardMaterial({
+    map: texture,
+    emissive: 0xffffff,
+    emissiveMap: texture,
+    emissiveIntensity: 0.15
+  });
+
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), screenMat);
+  screen.position.set(centerX, 1.8, -D + 0.081);
+  group.add(screen);
 
   parent.add(group);
 }
@@ -520,7 +596,7 @@ function createDutyRoster(parent, W, D) {
  */
 function createClock(parent, D) {
   const group = new THREE.Group();
-  const centerX = 4.5;
+  const centerX = 5.4; // 向右移动，为更大的屏幕腾出空间
   const centerY = 2.8;
   const clockZ = -D + 0.03;
 
