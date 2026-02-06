@@ -78,6 +78,9 @@ export function createClassroom(scene) {
   // ====== 时钟 ======
   createClock(classroom, D);
 
+  // ====== 校训 ======
+  createSchoolMotto(classroom, D);
+
   scene.add(classroom);
   return classroom;
 }
@@ -513,15 +516,19 @@ function createDutyRoster(parent, W, D) {
 
 /**
  * 时钟（挂在前墙上方）
+ * 修复了指针旋转轴心和位置不对的问题，并增加了实时走时逻辑
  */
 function createClock(parent, D) {
   const group = new THREE.Group();
+  const centerX = 4.5;
+  const centerY = 2.8;
+  const clockZ = -D + 0.03;
 
   // 钟面
   const faceMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const face = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.03, 32), faceMat);
   face.rotation.x = Math.PI / 2;
-  face.position.set(4.5, 2.8, -D + 0.03);
+  face.position.set(centerX, centerY, clockZ);
   group.add(face);
 
   // 钟框
@@ -530,25 +537,93 @@ function createClock(parent, D) {
     new THREE.TorusGeometry(0.25, 0.02, 8, 32),
     rimMat
   );
-  rim.position.set(4.5, 2.8, -D + 0.04);
+  rim.position.set(centerX, centerY, clockZ + 0.01);
   group.add(rim);
 
+  // 指针材质
+  const handMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+
   // 时针
-  const hourMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-  const hour = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.01), hourMat);
-  hour.position.set(4.5, 2.85, -D + 0.05);
+  const hourGeom = new THREE.BoxGeometry(0.02, 0.12, 0.01);
+  hourGeom.translate(0, 0.06, 0); // 移动几何体使其围绕底部端点旋转
+  const hour = new THREE.Mesh(hourGeom, handMat);
+  hour.position.set(centerX, centerY, clockZ + 0.02);
   group.add(hour);
 
   // 分针
-  const minute = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.18, 0.01), hourMat);
-  minute.position.set(4.5, 2.88, -D + 0.06);
-  minute.rotation.z = Math.PI / 6; // 稍微旋转表示某个时刻
+  const minuteGeom = new THREE.BoxGeometry(0.015, 0.18, 0.01);
+  minuteGeom.translate(0, 0.09, 0); // 移动几何体使其围绕底部端点旋转
+  const minute = new THREE.Mesh(minuteGeom, handMat);
+  minute.position.set(centerX, centerY, clockZ + 0.03);
   group.add(minute);
 
+  // 秒针
+  const secondGeom = new THREE.BoxGeometry(0.005, 0.22, 0.005);
+  secondGeom.translate(0, 0.11, 0);
+  const secondMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+  const second = new THREE.Mesh(secondGeom, secondMat);
+  second.position.set(centerX, centerY, clockZ + 0.04);
+  group.add(second);
+
   // 中心点
-  const center = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), rimMat);
-  center.position.set(4.5, 2.8, -D + 0.06);
+  const centerMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+  const center = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), centerMat);
+  center.position.set(centerX, centerY, clockZ + 0.04);
   group.add(center);
 
+  // 走时逻辑
+  const updateClock = () => {
+    const now = new Date();
+    const h = now.getHours() % 12;
+    const m = now.getMinutes();
+    const s = now.getSeconds();
+
+    // 顺时针旋转，Z轴正方向朝向摄像机，所以旋转值为负
+    hour.rotation.z = -((h + m / 60) * (Math.PI / 6));
+    minute.rotation.z = -((m + s / 60) * (Math.PI / 30));
+    second.rotation.z = -(s * (Math.PI / 30));
+  };
+
+  // 初始设置一次时间
+  updateClock();
+
+  // 通过 mesh 的 onBeforeRender 钩子自动更新
+  center.onBeforeRender = updateClock;
+
   parent.add(group);
+}
+
+/**
+ * 校训文字
+ */
+function createSchoolMotto(parent, D) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 1024;
+  canvas.height = 128;
+
+  // 背景透明
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 文字样式
+  ctx.fillStyle = '#cc0000'; // 深红色
+  ctx.font = 'bold 80px "Microsoft YaHei", "SimHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // 绘制文字
+  ctx.fillText('爱 国  敬 业  求 实  创 新', canvas.width / 2, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.MeshBasicMaterial({ 
+    map: texture, 
+    transparent: true,
+    side: THREE.FrontSide 
+  });
+  const geometry = new THREE.PlaneGeometry(4, 0.5);
+  const mesh = new THREE.Mesh(geometry, material);
+
+  // 位置：前墙正中央上方 (黑板和一体机区域 x: [-3.1, 3.1], 中心 x=0)
+  mesh.position.set(0, 3.0, -D + 0.01);
+  parent.add(mesh);
 }
