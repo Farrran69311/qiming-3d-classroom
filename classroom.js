@@ -867,12 +867,16 @@ function createSchoolMotto(parent, D) {
 
     // 文字样式
     ctx.fillStyle = '#cc0000'; // 深红色
-    // 换成宋体系列，更有书卷气和正式感
-    ctx.font = 'bold 85px "SimSun", "STSong", "Songti SC", "NSimSun", serif';
+    // 维持宋体的细长笔画特征，但通过加粗字体和描边来增强视觉冲击力
+    ctx.font = 'bold 95px "SimSun", "STSong", "Songti SC", "NSimSun", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // 绘制文字
+    // 通过描边技术人工加粗宋体笔画
+    ctx.strokeStyle = '#cc0000';
+    ctx.lineWidth = 3;
+    ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+    // 绘制填充
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
