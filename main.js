@@ -2,37 +2,48 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { createClassroom } from './classroom.js';
 
 // --- 1. 基础场景初始化 ---
 
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  30,
+  45,
   window.innerWidth / window.innerHeight,
   0.1,
-  20.0
+  100.0
 );
-camera.position.set(0, 1.3, 3.0);
+// 设置初始视角在教室内（偏后方看向讲台）
+camera.position.set(0, 1.8, -1.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.screenSpacePanning = true;
-controls.target.set(0.0, 1.3, 0.0);
+// 设置控制器中心为老师的位置
+controls.target.set(0.0, 1.3, -8.5);
+// 锁定缩放范围，防止穿墙
+controls.minDistance = 0.5;
+controls.maxDistance = 8.5;
 controls.update();
 
 // 灯光设置
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-directionalLight.position.set(1.0, 1.0, 1.0).normalize();
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(5, 8, 3);
+directionalLight.castShadow = true;
 scene.add(directionalLight);
+
+// --- 创建教室背景 ---
+createClassroom(scene);
 
 // --- 2. VRM 加载逻辑 ---
 
@@ -43,6 +54,39 @@ const loader = new GLTFLoader();
 loader.register((parser) => {
   return new VRMLoaderPlugin(parser);
 });
+
+/**
+ * 设置基础姿势（使人物双臂下垂，不再是 T-Pose）
+ * 根据 VRM 版本自动适配旋转方向
+ * @param {VRM} vrm 
+ */
+function setBasePose(vrm) {
+  if (!vrm || !vrm.humanoid) return;
+
+  // 通过 meta.metaVersion 判断 VRM 版本
+  // VRM 0.x => metaVersion === '0'，VRM 1.0 => metaVersion === '1'
+  const isV0 = vrm.meta?.metaVersion === '0';
+  // VRM 0.x 经过 rotateVRM0 之后，骨骼坐标系是翻转的，正负号相反
+  const sign = isV0 ? 1 : -1;
+
+  console.log('VRM 版本:', isV0 ? '0.x' : '1.0', '| 旋转系数:', sign);
+
+  const leftUpperArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+  const rightUpperArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+
+  if (leftUpperArm) {
+    leftUpperArm.rotation.z = sign * 1.3; // 使左臂下垂
+  }
+  if (rightUpperArm) {
+    rightUpperArm.rotation.z = sign * -1.3; // 使右臂下垂
+  }
+
+  // 稍微弯曲手肘让姿势更自然
+  const leftLowerArm = vrm.humanoid.getNormalizedBoneNode('leftLowerArm');
+  const rightLowerArm = vrm.humanoid.getNormalizedBoneNode('rightLowerArm');
+  if (leftLowerArm) leftLowerArm.rotation.z = sign * 0.2;
+  if (rightLowerArm) rightLowerArm.rotation.z = sign * -0.2;
+}
 
 /**
  * 加载 VRM 模型的函数
@@ -65,11 +109,17 @@ function loadVRM(url) {
       currentVRM = vrm;
       scene.add(vrm.scene);
 
+      // 将人物放在讲台前方一点，避免穿模
+      vrm.scene.position.set(0, 0, -8.1);
+
       // VRM 默认朝向是 +Z，旋转 180 度面向相机
       vrm.scene.rotation.y = Math.PI;
 
       // 针对 VRM 0.x 的旋转修正
       VRMUtils.rotateVRM0(vrm);
+
+      // 设置基础姿势：放下双臂
+      setBasePose(vrm);
       
       console.log('模型加载成功:', url);
     },
@@ -87,11 +137,21 @@ function loadVRM(url) {
 
 // --- 3. UI 交互绑定 ---
 
-// 监听下拉菜单的变化
+// 切换模型
 const selector = document.getElementById('model-selector');
 if (selector) {
   selector.addEventListener('change', (event) => {
     loadVRM(event.target.value);
+  });
+}
+
+// 视角恢复功能
+const resetBtn = document.getElementById('reset-view-btn');
+if (resetBtn) {
+  resetBtn.addEventListener('click', () => {
+    camera.position.set(0, 1.8, -1.5);
+    controls.target.set(0.0, 1.3, -8.5);
+    controls.update();
   });
 }
 
@@ -111,6 +171,12 @@ function animate() {
     // 关键：更新物理（头发、裙子）和表情
     currentVRM.update(deltaTime);
   }
+
+  // --- 空气墙逻辑：限制相机在办公室内 ---
+  // X: [-5.8, 5.8], Y: [0.1, 3.4], Z: [-9.8, -0.2]
+  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -5.8, 5.8);
+  camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.1, 3.4);
+  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -9.8, -0.2);
 
   renderer.render(scene, camera);
 }
