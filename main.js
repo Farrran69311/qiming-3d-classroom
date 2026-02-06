@@ -27,7 +27,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.screenSpacePanning = true;
 // 设置控制器中心为老师的位置
-controls.target.set(0.0, 1.3, -8.5);
+controls.target.set(0.0, 1.3, -9.0);
 // 锁定缩放范围，防止穿墙
 controls.minDistance = 0.5;
 controls.maxDistance = 8.5;
@@ -109,8 +109,9 @@ function loadVRM(url) {
       currentVRM = vrm;
       scene.add(vrm.scene);
 
-      // 将人物放在讲台前方一点，避免穿模
-      vrm.scene.position.set(0, 0, -8.1);
+      // 将人物放在讲台地坪上 (y=0.15)
+      // 地坪范围在 Z: -10 到 -8.7，将老师放在离讲桌更近的位置
+      vrm.scene.position.set(0, 0.15, -9.0);
 
       // VRM 默认朝向是 +Z，旋转 180 度面向相机
       vrm.scene.rotation.y = Math.PI;
@@ -150,7 +151,7 @@ const resetBtn = document.getElementById('reset-view-btn');
 if (resetBtn) {
   resetBtn.addEventListener('click', () => {
     camera.position.set(0, 1.8, -1.5);
-    controls.target.set(0.0, 1.3, -8.5);
+    controls.target.set(0.0, 1.3, -9.0);
     controls.update();
   });
 }

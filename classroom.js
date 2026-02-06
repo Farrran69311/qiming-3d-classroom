@@ -291,28 +291,56 @@ function createSmartDisplay(parent, D) {
  * 讲台（包含地面抬高的台基和老师用的讲桌）
  */
 function createPodium(parent, D) {
-  const woodMat = new THREE.MeshStandardMaterial({ color: 0xb8860b }); // 深金色木头
-  const platformMat = new THREE.MeshStandardMaterial({ color: 0xdddddd }); // 浅灰色或与地板接近的石材色
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0xb8860b }); // 讲桌木色
+  const platformMat = new THREE.MeshStandardMaterial({ 
+    color: 0x5d4037, // 讲台地基深咖啡色
+    roughness: 0.9 
+  }); 
 
-  // 1. 讲台地坪 (抬高部分)
-  // 宽度覆盖教室前端，高度约 0.15m
-  const pWidth = 10; // 宽度比教室略窄一点
+  // 1. 讲台地坪 (俯视图梯形：绝大部分为直边，仅前端带小切角防止绊倒)
   const pHeight = 0.15;
-  const pDepth = 1.8;
-  const platform = new THREE.Mesh(new THREE.BoxGeometry(pWidth, pHeight, pDepth), platformMat);
-  platform.position.set(0, pHeight / 2, -D + pDepth / 2);
+  const pDepth = 1.3;
+  const straightDepth = 1.15; // 绝大部分(1.15m)是直边
+  
+  // 讲台长边（贴墙侧）延伸至黑板两侧对齐
+  // 黑板总宽度计算：一体机(3.0) + 左右黑板(2.4*2) = 7.8
+  const wBack = 7.8;  
+  const wFront = 7.2; // 前端轻微收窄，形成保护性的小切角
+  
+  const shape = new THREE.Shape();
+  // 以墙面中心为原点 (0,0) 开始绘制
+  // y轴在 local 坐标系中旋转后对应 world 坐标系的 Z 轴
+  shape.moveTo(-wBack / 2, 0);                 // 后左点 (贴墙)
+  shape.lineTo(wBack / 2, 0);                  // 后右点 (贴墙)
+  shape.lineTo(wBack / 2, -straightDepth);     // 侧面直边段结束 (右)
+  shape.lineTo(wFront / 2, -pDepth);           // 倾斜至前右点
+  shape.lineTo(-wFront / 2, -pDepth);          // 前左点
+  shape.lineTo(-wBack / 2, -straightDepth);    // 倾斜至侧面直边段开始 (左)
+  shape.closePath();
+
+  const platformGeo = new THREE.ExtrudeGeometry(shape, {
+    depth: pHeight,
+    bevelEnabled: false
+  });
+  
+  const platform = new THREE.Mesh(platformGeo, platformMat);
+  // 旋转：将平面的 XY 旋转到 XZ 轴，使挤出的 depth(pHeight) 变为高度 Y
+  platform.rotation.x = -Math.PI / 2;
+  // 位置：底部着地 (y=0)，且紧贴前墙 (z=-D)
+  platform.position.set(0, 0, -D); 
   parent.add(platform);
 
-  // 2. 老师讲桌 (放在地坪上)
-  // 讲台主体
+  // 2. 老师讲桌 (直接放在地板上，位于地坪前方)
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), woodMat);
-  body.position.set(0, pHeight + 0.5, -D + 1.2);
+  // 讲桌位置：放置在俯视图倒梯形宽边（前沿）的更前方，底部着地 (y=0.5)
+  // 地坪深度1.3，讲柜中心移至 -D + 1.6，使其后侧边缘 (-D + 1.3) 与地坪前缘严丝合缝
+  body.position.set(0, 0.5, -D + 1.6); 
   parent.add(body);
 
-  // 讲台面板（倾斜的顶部）
+  // 讲台面板（讲桌顶部的倾斜面板）
   const topMat = new THREE.MeshStandardMaterial({ color: 0xcd9b1d });
   const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.7), topMat);
-  top.position.set(0, pHeight + 1.01, -D + 1.2);
+  top.position.set(0, 1.01, -D + 1.6);
   parent.add(top);
 }
 
