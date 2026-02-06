@@ -16,7 +16,6 @@ export function createClassroom(scene) {
   // ====== 材质定义 ======
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }); // 白色墙壁
   const floorMat = createFloorMaterial();           // 带网格的地板
-  const ceilingMat = createCeilingMaterial();       // 办公室风格石膏板天花板
 
   // ====== 地板 ======
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), floorMat);
@@ -25,11 +24,8 @@ export function createClassroom(scene) {
   floor.receiveShadow = true;
   classroom.add(floor);
 
-  // ====== 天花板 ======
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W, D), ceilingMat);
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.set(0, H, -D / 2);
-  classroom.add(ceiling);
+  // ====== 天花板（两种纹理交替拼接） ======
+  createCeilingTiles(classroom, W, H, D);
 
   // ====== 前墙（黑板墙，在人物背后） ======
   const frontWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), wallMat);
@@ -100,7 +96,19 @@ export function createClassroom(scene) {
  * 添加踢脚线
  */
 function addBaseboards(parent, W, H, D) {
-  const bbMat = new THREE.MeshStandardMaterial({ color: 0x4d3227 }); // 深色木纹
+  const loader = new THREE.TextureLoader();
+  const barkTex = loader.load('/textures/BarkStripped0005_23_L.jpg');
+  barkTex.colorSpace = THREE.SRGBColorSpace;
+  barkTex.wrapS = THREE.RepeatWrapping;
+  barkTex.wrapT = THREE.RepeatWrapping;
+  barkTex.repeat.set(12, 1);
+
+  const bbMat = new THREE.MeshStandardMaterial({ 
+    map: barkTex,
+    color: 0x4d3227,
+    roughness: 0.8,
+    metalness: 0.05
+  });
   const h = 0.12; // 踢脚线高度
   const d = 0.02; // 踢脚线厚度
 
@@ -165,38 +173,76 @@ function addCeilingLamps(parent, W, H, D) {
  * 创建地板材质（带网格纹理）
  */
 function createFloorMaterial() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-
-  // 底色 - 浅木色
-  ctx.fillStyle = '#d4b896';
-  ctx.fillRect(0, 0, 512, 512);
-
-  // 网格线
-  ctx.strokeStyle = '#c4a882';
-  ctx.lineWidth = 2;
-  const tileSize = 64;
-  for (let i = 0; i <= 512; i += tileSize) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0); ctx.lineTo(i, 512);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(0, i); ctx.lineTo(512, i);
-    ctx.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
+  const loader = new THREE.TextureLoader();
+  const texture = loader.load('/textures/floor/FloorsMarble0026_1_L.jpg');
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(4, 4);
+  texture.repeat.set(6, 5);
 
-  return new THREE.MeshStandardMaterial({ map: texture });
+  return new THREE.MeshStandardMaterial({ 
+    map: texture,
+    roughness: 0.4,
+    metalness: 0.1
+  });
 }
 
 /**
- * 创建天花板材质（加载外部纹理）
+ * 创建天花板瓷砖（两种纹理交替拼接）
+ */
+function createCeilingTiles(parent, W, H, D) {
+  const loader = new THREE.TextureLoader();
+
+  const texA = loader.load('/textures/ceilings/62d6efe3-6988-4a3e-88b0-ab833e9eb009.jpg');
+  texA.colorSpace = THREE.SRGBColorSpace;
+
+  const texB = loader.load('/textures/ceilings/ffdcd990-4e83-4963-aa32-87e1cb1559d4.png');
+  texB.colorSpace = THREE.SRGBColorSpace;
+
+  const matA = new THREE.MeshStandardMaterial({
+    map: texA,
+    color: 0xffffff,
+    emissive: 0x444444,
+    roughness: 0.95,
+    metalness: 0.0,
+    side: THREE.DoubleSide
+  });
+  const matB = new THREE.MeshStandardMaterial({
+    map: texB,
+    color: 0xffffff,
+    emissive: 0x444444,
+    roughness: 0.95,
+    metalness: 0.0,
+    side: THREE.DoubleSide
+  });
+
+  // 按 0.6m x 0.6m 的网格切分天花板（标准天花板吊顶尺寸）
+  const tileSize = 0.6;
+  const cols = Math.ceil(W / tileSize);
+  const rows = Math.ceil(D / tileSize);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      // 交替选择纹理（棋盘格式）
+      const mat = (r + c) % 2 === 0 ? matA : matB;
+
+      const tileW = Math.min(tileSize, W - c * tileSize);
+      const tileD = Math.min(tileSize, D - r * tileSize);
+
+      const tile = new THREE.Mesh(new THREE.PlaneGeometry(tileW, tileD), mat);
+      tile.rotation.x = Math.PI / 2;
+      tile.position.set(
+        -W / 2 + c * tileSize + tileW / 2,
+        H,
+        -(r * tileSize + tileD / 2)
+      );
+      parent.add(tile);
+    }
+  }
+}
+
+/**
+ * 创建天花板材质（保留备用）
  */
 function createCeilingMaterial() {
   const loader = new THREE.TextureLoader();
@@ -229,8 +275,20 @@ function createBlackboard(parent, D) {
   const handwritingTex = loader.load('/textures/blackboard/chalkhandwriting.png');
   const scheduleTex = loader.load('/textures/blackboard/schedule.png');
 
+  // 加载木纹素材用于边框
+  const frameWoodTex = loader.load('/textures/WoodFine0033_8_L.jpg');
+  frameWoodTex.colorSpace = THREE.SRGBColorSpace;
+  frameWoodTex.wrapS = THREE.RepeatWrapping;
+  frameWoodTex.wrapT = THREE.RepeatWrapping;
+  frameWoodTex.repeat.set(4, 1);
+
   const boardMat = new THREE.MeshStandardMaterial({ color: 0x2d5016 }); // 深绿色
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x8B7355 }); // 棕色木框
+  const frameMat = new THREE.MeshStandardMaterial({ 
+    map: frameWoodTex,
+    color: 0x8B7355,
+    roughness: 0.6,
+    metalness: 0.05
+  });
 
   // 与一体机外壳高度保持一致：1.775
   const boardH = 1.775;
@@ -391,9 +449,29 @@ function createSmartDisplay(parent, D) {
  * 讲台（包含地面抬高的台基和老师用的讲桌）
  */
 function createPodium(parent, D) {
-  const podMat = new THREE.MeshStandardMaterial({ color: 0xf2ead3 }); // 讲台主体更明显的米色（奶油/象牙白）
+  const loader = new THREE.TextureLoader();
+  const podWoodTex = loader.load('/textures/WoodFine0023_L.jpg');
+  podWoodTex.colorSpace = THREE.SRGBColorSpace;
+  podWoodTex.wrapS = THREE.RepeatWrapping;
+  podWoodTex.wrapT = THREE.RepeatWrapping;
+  podWoodTex.repeat.set(2, 2);
+
+  const podMat = new THREE.MeshStandardMaterial({ 
+    map: podWoodTex,
+    color: 0xf2ead3,
+    roughness: 0.6,
+    metalness: 0.05
+  });
+
+  const platformBarkTex = loader.load('/textures/BarkStripped0005_23_L.jpg');
+  platformBarkTex.colorSpace = THREE.SRGBColorSpace;
+  platformBarkTex.wrapS = THREE.RepeatWrapping;
+  platformBarkTex.wrapT = THREE.RepeatWrapping;
+  platformBarkTex.repeat.set(8, 2);
+
   const platformMat = new THREE.MeshStandardMaterial({ 
-    color: 0x8b4513, // 讲台地基褐色木质感
+    map: platformBarkTex,
+    color: 0x8b4513,
     roughness: 0.8,
     metalness: 0.1
   }); 
@@ -469,7 +547,18 @@ function createPodium(parent, D) {
  * 学生课桌椅
  */
 function createDesksAndChairs(parent, D) {
-  const deskMat = new THREE.MeshStandardMaterial({ color: 0xc4a35a }); // 浅木色
+  const loader = new THREE.TextureLoader();
+  const woodTex = loader.load('/textures/WoodFine0023_L.jpg');
+  woodTex.colorSpace = THREE.SRGBColorSpace;
+  woodTex.wrapS = THREE.RepeatWrapping;
+  woodTex.wrapT = THREE.RepeatWrapping;
+  woodTex.repeat.set(2, 2);
+
+  const deskMat = new THREE.MeshStandardMaterial({ 
+    map: woodTex,
+    roughness: 0.6,
+    metalness: 0.05
+  });
   const legMat = new THREE.MeshStandardMaterial({ color: 0x888888 });  // 金属灰
   const chairMat = new THREE.MeshStandardMaterial({ color: 0x4a90d9 }); // 蓝色椅面
 
@@ -601,43 +690,72 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
   createSeg(-2*winZGap - winW/2, -3*winZGap + winW/2, winY, winH); // 柱2
   createSeg(-3*winZGap - winW/2, -D, winY, winH); // 前角柱
 
-  // 2. 窗外风景
+  // 2. 窗外风景（使用真实纹理）
   const sceneLoader = new THREE.TextureLoader();
-  // 模拟一个远景图，这里先用 Canvas 绘制一个简单的自然风景梯度，或者你可以替换为一张图片
-  const sceneCanvas = document.createElement('canvas');
-  sceneCanvas.width = 1024;
-  sceneCanvas.height = 512;
-  const sCtx = sceneCanvas.getContext('2d');
-  const grd = sCtx.createLinearGradient(0, 0, 0, 512);
-  grd.addColorStop(0, '#4facfe'); // 深天蓝
-  grd.addColorStop(0.5, '#00f2fe'); // 浅蓝
-  grd.addColorStop(0.6, '#ffffff'); // 地平线白
-  grd.addColorStop(0.61, '#96e6a1'); // 浅绿
-  grd.addColorStop(1, '#d4fc79'); // 嫩绿
-  sCtx.fillStyle = grd;
-  sCtx.fillRect(0, 0, 1024, 512);
 
-  // 增加一些云朵
-  sCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  for(let i=0; i<8; i++) {
-    const cx = Math.random() * 1024;
-    const cy = Math.random() * 200;
-    const cr = 20 + Math.random() * 30;
-    sCtx.beginPath();
-    sCtx.arc(cx, cy, cr, 0, Math.PI * 2);
-    sCtx.arc(cx + cr, cy, cr * 0.8, 0, Math.PI * 2);
-    sCtx.arc(cx - cr, cy, cr * 0.8, 0, Math.PI * 2);
-    sCtx.fill();
-  }
-  
-  const sceneTex = new THREE.CanvasTexture(sceneCanvas);
-  const scenery = new THREE.Mesh(
-    new THREE.PlaneGeometry(D * 2, H * 2),
-    new THREE.MeshBasicMaterial({ map: sceneTex, side: THREE.DoubleSide })
+  // 天空背景
+  const skyTex = sceneLoader.load('/textures/FullskiesSunset0027_1_L.jpg');
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  const skyPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(D * 4, H * 4),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.DoubleSide })
   );
-  scenery.rotation.y = Math.PI / 2;
-  scenery.position.set(wallX - 5, H / 2, -D / 2); // 放在窗外 5 米处
-  group.add(scenery);
+  skyPlane.rotation.y = Math.PI / 2;
+  skyPlane.position.set(wallX - 20, H * 0.8, -D / 2);
+  group.add(skyPlane);
+
+  // 草地
+  const grassTex = sceneLoader.load('/textures/Grass0002_2_L.jpg');
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+  grassTex.wrapS = THREE.RepeatWrapping;
+  grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.repeat.set(6, 6);
+  const grassPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(25, D * 2),
+    new THREE.MeshBasicMaterial({ map: grassTex })
+  );
+  grassPlane.rotation.x = -Math.PI / 2;
+  grassPlane.position.set(wallX - 12, -0.05, -D / 2);
+  group.add(grassPlane);
+
+  // 小路
+  const roadTex = sceneLoader.load('/textures/Roads0086_33_L.jpg');
+  roadTex.colorSpace = THREE.SRGBColorSpace;
+  roadTex.wrapS = THREE.RepeatWrapping;
+  roadTex.wrapT = THREE.RepeatWrapping;
+  roadTex.repeat.set(1, 4);
+  const roadPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.5, D * 2),
+    new THREE.MeshBasicMaterial({ map: roadTex })
+  );
+  roadPlane.rotation.x = -Math.PI / 2;
+  roadPlane.position.set(wallX - 4, -0.02, -D / 2);
+  group.add(roadPlane);
+
+  // 树木（Billboard）
+  const treeFiles = [
+    '/textures/Trees0030_M.png',
+    '/textures/Trees0037_M.png',
+    '/textures/Trees0046_M.png'
+  ];
+  const treePositions = [
+    { x: wallX - 3, z: -2, scale: 4.5 },
+    { x: wallX - 7, z: -5, scale: 6 },
+    { x: wallX - 4.5, z: -8, scale: 5 },
+    { x: wallX - 9, z: -3.5, scale: 4 },
+    { x: wallX - 8, z: -7, scale: 5.5 },
+  ];
+  treePositions.forEach((pos, i) => {
+    const treeTex = sceneLoader.load(treeFiles[i % treeFiles.length]);
+    treeTex.colorSpace = THREE.SRGBColorSpace;
+    const treePlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(pos.scale, pos.scale),
+      new THREE.MeshBasicMaterial({ map: treeTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide })
+    );
+    treePlane.rotation.y = Math.PI / 2;
+    treePlane.position.set(pos.x, pos.scale / 2, pos.z);
+    group.add(treePlane);
+  });
 
   // 3. 循环创建玻璃、窗框及附件
   for (let i = 0; i < windowCount; i++) {
@@ -699,7 +817,14 @@ function createRightWall(parent, W, H, D, wallMat) {
   const wallX = W / 2;
   const doorW = 0.9;
   const doorH = 2.0;
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0xcd853f }); 
+  const doorLoader = new THREE.TextureLoader();
+  const doorTex = doorLoader.load('/textures/DF1A392A-2EBA-4432-BFEB-762A09D3F832_4_5005_c.jpeg');
+  doorTex.colorSpace = THREE.SRGBColorSpace;
+  const doorMat = new THREE.MeshStandardMaterial({ 
+    map: doorTex,
+    roughness: 0.6,
+    metalness: 0.05
+  }); 
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 }); 
   const glassMat = new THREE.MeshStandardMaterial({ 
     color: 0xffffff, 
@@ -775,23 +900,70 @@ function createRightWall(parent, W, H, D, wallMat) {
   createWallSegment(-3.5, -6.5, wallX, 1.0, 0.5); 
   createWallSegment(-3.5, -6.5, wallX, H - (winY + winH/2), (H + (winY + winH/2))/2);
 
-  // 右侧风景
-  const sceneCanvas = document.createElement('canvas');
-  sceneCanvas.width = 1024; sceneCanvas.height = 512;
-  const sCtx = sceneCanvas.getContext('2d');
-  const grd = sCtx.createLinearGradient(0, 0, 0, 512);
-  grd.addColorStop(0, '#4facfe'); grd.addColorStop(0.5, '#00f2fe'); grd.addColorStop(0.6, '#ffffff'); grd.addColorStop(0.61, '#96e6a1'); grd.addColorStop(1, '#d4fc79');
-  sCtx.fillStyle = grd; sCtx.fillRect(0, 0, 1024, 512);
-  sCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-  for(let i=0; i<6; i++) {
-    const cx = Math.random() * 1024; const cy = Math.random() * 150; const cr = 25;
-    sCtx.beginPath(); sCtx.arc(cx, cy, cr, 0, Math.PI * 2); sCtx.fill();
-  }
-  const sceneTex = new THREE.CanvasTexture(sceneCanvas);
-  const scenery = new THREE.Mesh(new THREE.PlaneGeometry(D * 2, H * 2), new THREE.MeshBasicMaterial({ map: sceneTex, side: THREE.DoubleSide }));
-  scenery.rotation.y = -Math.PI / 2;
-  scenery.position.set(wallX + 8, H / 2, -D / 2); 
-  group.add(scenery);
+  // 右侧风景（使用真实纹理）
+  const sceneLoader = new THREE.TextureLoader();
+
+  // 天空背景（黄昏）
+  const skyTexR = sceneLoader.load('/textures/FullskiesDusk0030_1_L.jpg');
+  skyTexR.colorSpace = THREE.SRGBColorSpace;
+  const skyPlaneR = new THREE.Mesh(
+    new THREE.PlaneGeometry(D * 4, H * 4),
+    new THREE.MeshBasicMaterial({ map: skyTexR, side: THREE.DoubleSide })
+  );
+  skyPlaneR.rotation.y = -Math.PI / 2;
+  skyPlaneR.position.set(wallX + 20, H * 0.8, -D / 2);
+  group.add(skyPlaneR);
+
+  // 草地
+  const grassTexR = sceneLoader.load('/textures/Grass0002_2_L.jpg');
+  grassTexR.colorSpace = THREE.SRGBColorSpace;
+  grassTexR.wrapS = THREE.RepeatWrapping;
+  grassTexR.wrapT = THREE.RepeatWrapping;
+  grassTexR.repeat.set(6, 6);
+  const grassPlaneR = new THREE.Mesh(
+    new THREE.PlaneGeometry(25, D * 2),
+    new THREE.MeshBasicMaterial({ map: grassTexR })
+  );
+  grassPlaneR.rotation.x = -Math.PI / 2;
+  grassPlaneR.position.set(wallX + 12, -0.05, -D / 2);
+  group.add(grassPlaneR);
+
+  // 小路
+  const roadTexR = sceneLoader.load('/textures/Roads0086_33_L.jpg');
+  roadTexR.colorSpace = THREE.SRGBColorSpace;
+  roadTexR.wrapS = THREE.RepeatWrapping;
+  roadTexR.wrapT = THREE.RepeatWrapping;
+  roadTexR.repeat.set(1, 4);
+  const roadPlaneR = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.5, D * 2),
+    new THREE.MeshBasicMaterial({ map: roadTexR })
+  );
+  roadPlaneR.rotation.x = -Math.PI / 2;
+  roadPlaneR.position.set(wallX + 5, -0.02, -D / 2);
+  group.add(roadPlaneR);
+
+  // 树木（Billboard）
+  const treeFilesR = [
+    '/textures/Trees0046_M.png',
+    '/textures/Trees0037_M.png',
+    '/textures/Trees0030_M.png'
+  ];
+  const treePosR = [
+    { x: wallX + 3, z: -3, scale: 4.5 },
+    { x: wallX + 8, z: -6, scale: 6 },
+    { x: wallX + 5.5, z: -9, scale: 5 },
+  ];
+  treePosR.forEach((pos, i) => {
+    const tTex = sceneLoader.load(treeFilesR[i % treeFilesR.length]);
+    tTex.colorSpace = THREE.SRGBColorSpace;
+    const tPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(pos.scale, pos.scale),
+      new THREE.MeshBasicMaterial({ map: tTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide })
+    );
+    tPlane.rotation.y = -Math.PI / 2;
+    tPlane.position.set(pos.x, pos.scale / 2, pos.z);
+    group.add(tPlane);
+  });
 
   parent.add(group);
 }
@@ -831,7 +1003,18 @@ function createWindowLights(scene, W, H, D) {
  * 柜子（靠后墙一横排）
  */
 function createCabinet(parent, W, D) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xa0784a }); // 棕色木柜
+  const loader = new THREE.TextureLoader();
+  const cabinetTex = loader.load('/textures/WoodFine0033_8_L.jpg');
+  cabinetTex.colorSpace = THREE.SRGBColorSpace;
+  cabinetTex.wrapS = THREE.RepeatWrapping;
+  cabinetTex.wrapT = THREE.RepeatWrapping;
+  cabinetTex.repeat.set(1, 1);
+
+  const mat = new THREE.MeshStandardMaterial({ 
+    map: cabinetTex,
+    roughness: 0.6,
+    metalness: 0.05
+  });
   const lineMat = new THREE.MeshStandardMaterial({ color: 0x8a6535 });
   const handleMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
 
@@ -1103,7 +1286,19 @@ function createBookshelf(parent, W, D) {
   const shelfX = -W / 2 + 0.6; // 靠左墙
   const shelfZ = -D + 0.35;     // 靠前墙
   
-  const shelfMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // 白色柜子
+  const loader = new THREE.TextureLoader();
+  const shelfWoodTex = loader.load('/textures/WoodFine0033_8_L.jpg');
+  shelfWoodTex.colorSpace = THREE.SRGBColorSpace;
+  shelfWoodTex.wrapS = THREE.RepeatWrapping;
+  shelfWoodTex.wrapT = THREE.RepeatWrapping;
+  shelfWoodTex.repeat.set(1, 2);
+
+  const shelfMat = new THREE.MeshStandardMaterial({ 
+    map: shelfWoodTex,
+    color: 0xeeeeee,
+    roughness: 0.5,
+    metalness: 0.05
+  });
   
   const shelfW = 1.0;
   const shelfH = 2.0;
