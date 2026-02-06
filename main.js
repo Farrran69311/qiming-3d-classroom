@@ -125,8 +125,8 @@ function loadVRM(url) {
       // 地坪范围在 Z: -10 到 -8.7，将老师放在离讲桌更近的位置
       vrm.scene.position.set(0, 0.15, -9.0);
 
-      // VRM 默认朝向是 +Z，旋转 180 度面向相机
-      vrm.scene.rotation.y = Math.PI;
+      // VRM 默认朝向是 +Z，面向相机（相机在 Z = -4.9）
+      vrm.scene.rotation.y = 0;
 
       // 针对 VRM 0.x 的旋转修正
       VRMUtils.rotateVRM0(vrm);
