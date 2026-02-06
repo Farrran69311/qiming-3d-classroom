@@ -45,11 +45,8 @@ export function createClassroom(scene) {
   // ====== 左墙（带窗户缺口） ======
   createLeftWallWithWindows(classroom, W, H, D, wallMat);
 
-  // ====== 右墙 ======
-  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(D, H), wallMat);
-  rightWall.rotation.y = -Math.PI / 2;
-  rightWall.position.set(W / 2, H / 2, -D / 2);
-  classroom.add(rightWall);
+  // ====== 右墙（带前后门和飘窗） ======
+  createRightWall(classroom, W, H, D, wallMat);
 
   // ====== 黑板 ======
   createBlackboard(classroom, D);
@@ -68,6 +65,9 @@ export function createClassroom(scene) {
 
   // ====== 柜子（右墙靠后方） ======
   createCabinet(classroom, W, D);
+
+  // ====== 书柜（左前角，放字典） ======
+  createBookshelf(classroom, W, D);
 
   // ====== 绿植 ======
   createPlants(classroom, W, D);
@@ -337,6 +337,30 @@ function createSingleDesk(parent, x, z, deskMat, legMat, chairMat) {
   desktop.position.set(0, 0.72, 0);
   group.add(desktop);
 
+  // 书桌堂（桌面下的储物槽）
+  const cavityH = 0.12; // 储物槽高度
+  const cavityLowerY = 0.705 - cavityH; // 桌面下边缘 y - 高度
+  
+  // 底板
+  const cavityBottom = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.02, 0.46), deskMat);
+  cavityBottom.position.set(0, cavityLowerY, 0);
+  group.add(cavityBottom);
+
+  // 背板
+  const cavityBack = new THREE.Mesh(new THREE.BoxGeometry(0.86, cavityH, 0.02), deskMat);
+  cavityBack.position.set(0, cavityLowerY + cavityH / 2, -0.22);
+  group.add(cavityBack);
+
+  // 左侧板
+  const cavityLeft = new THREE.Mesh(new THREE.BoxGeometry(0.02, cavityH, 0.46), deskMat);
+  cavityLeft.position.set(-0.42, cavityLowerY + cavityH / 2, 0);
+  group.add(cavityLeft);
+
+  // 右侧板
+  const cavityRight = new THREE.Mesh(new THREE.BoxGeometry(0.02, cavityH, 0.46), deskMat);
+  cavityRight.position.set(0.42, cavityLowerY + cavityH / 2, 0);
+  group.add(cavityRight);
+
   // 桌腿（4条）
   const legGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.72);
   const positions = [
@@ -476,6 +500,97 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
 }
 
 /**
+ * 右墙：包含前后两个教室门和中间的飘窗
+ */
+function createRightWall(parent, W, H, D, wallMat) {
+  const group = new THREE.Group();
+  const wallX = W / 2;
+  const doorW = 0.9;
+  const doorH = 2.0;
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0xcd853f }); // 木质门
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // 白色门框
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.3 });
+
+  // 1. 基础实墙（分段拼接，避开门和窗的位置）
+  const createWallSegment = (zStart, zEnd, xPos, h, y) => {
+    const width = Math.abs(zEnd - zStart);
+    const seg = new THREE.Mesh(new THREE.PlaneGeometry(width, h), wallMat);
+    seg.rotation.y = -Math.PI / 2;
+    seg.position.set(xPos, y, (zStart + zEnd) / 2);
+    group.add(seg);
+  };
+
+  // 分段绘制右墙（以避开门 Z: -1.0, -9.0 和 飘窗 Z: -3.5~-6.5）
+  // 底部（门和窗台以下的墙）
+  createWallSegment(0, -0.5, wallX, H, H/2); // 后角
+  createWallSegment(-1.4, -3.5, wallX, H, H/2); // 后门与窗之间
+  createWallSegment(-6.5, -8.6, wallX, H, H/2); // 前门与窗之间
+  createWallSegment(-9.5, -10, wallX, H, H/2); // 前角
+
+  // 2. 门逻辑
+  const createDoor = (z) => {
+    const doorGroup = new THREE.Group();
+    // 门体
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.05, doorH, doorW), doorMat);
+    door.position.set(wallX, doorH / 2, z);
+    group.add(door);
+    // 门框
+    const topFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, doorW + 0.1), frameMat);
+    topFrame.position.set(wallX, doorH + 0.025, z);
+    group.add(topFrame);
+    // 门窗（门上的小视窗）
+    const doorWin = new THREE.Mesh(new THREE.PlaneGeometry(doorW * 0.4, 0.5), glassMat);
+    doorWin.rotation.y = -Math.PI / 2;
+    doorWin.position.set(wallX - 0.03, doorH * 0.7, z);
+    group.add(doorWin);
+    // 门上方补齐的墙
+    createWallSegment(z - doorW/2, z + doorW/2, wallX, H - doorH - 0.05, (H + doorH + 0.05)/2);
+  };
+
+  createDoor(-0.95); // 后门
+  createDoor(-9.05); // 前门
+
+  // 3. 飘窗逻辑 (Z: -3.5 ~ -6.5)
+  const winW = 3.0;
+  const winH = 1.6;
+  const winY = 1.8;
+  const winDepth = 0.4;
+  
+  // 飘窗底座部分（室内）
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.1, winW), new THREE.MeshStandardMaterial({ color: 0xf5f5f5 }));
+  sill.position.set(wallX - winDepth/2, 1.0, -5.0);
+  group.add(sill);
+  
+  // 飘窗玻璃（向外突出一点）
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(0.01, winH, winW), glassMat);
+  glass.position.set(wallX + winDepth, winY, -5.0);
+  group.add(glass);
+
+  // 飘窗侧面玻璃
+  const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(winDepth, winH, 0.01), glassMat);
+  sideGlass.position.set(wallX + winDepth/2, winY, -5.0 + winW/2);
+  group.add(sideGlass);
+  const sideGlass2 = sideGlass.clone();
+  sideGlass2.position.z = -5.0 - winW/2;
+  group.add(sideGlass2);
+
+  // 飘窗顶部和底部封闭（向外突出的部分）
+  const winExtenMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+  const winTop = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.05, winW), winExtenMat);
+  winTop.position.set(wallX + winDepth/2, winY + winH/2, -5.0);
+  group.add(winTop);
+  const winBottom = winTop.clone();
+  winBottom.position.y = winY - winH/2;
+  group.add(winBottom);
+
+  // 飘窗上下方补齐的墙
+  createWallSegment(-3.5, -6.5, wallX, 1.0, 0.5); // 窗户下方
+  createWallSegment(-3.5, -6.5, wallX, H - (winY + winH/2), (H + (winY + winH/2))/2); // 窗户上方
+
+  parent.add(group);
+}
+
+/**
  * 窗户光照效果
  */
 function createWindowLights(scene, W, H, D) {
@@ -493,31 +608,47 @@ function createWindowLights(scene, W, H, D) {
 /**
  * 柜子（右墙靠后方）
  */
+/**
+ * 柜子（靠后墙一横排）
+ */
 function createCabinet(parent, W, D) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xa0784a }); // 棕色木柜
-  const group = new THREE.Group();
-
-  // 柜体
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.5), mat);
-  body.position.set(W / 2 - 0.35, 0.8, -1.5);
-  group.add(body);
-
-  // 柜门分隔线（两扇门的效果）
   const lineMat = new THREE.MeshStandardMaterial({ color: 0x8a6535 });
-  const line = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.5, 0.52), lineMat);
-  line.position.set(W / 2 - 0.35, 0.8, -1.5);
-  group.add(line);
-
-  // 门把手
   const handleMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
-  const handleL = new THREE.Mesh(new THREE.SphereGeometry(0.03), handleMat);
-  handleL.position.set(W / 2 - 0.5, 0.85, -1.24);
-  group.add(handleL);
-  const handleR = handleL.clone();
-  handleR.position.x = W / 2 - 0.2;
-  group.add(handleR);
 
-  parent.add(group);
+  const cabW = 1.0;
+  const cabH = 1.2;
+  const cabD = 0.5;
+  const count = 8; // 放置8个柜子组成一排
+  const totalW = count * cabW;
+  const startX = -totalW / 2 + cabW / 2;
+  const zPos = -cabD / 2 - 0.05; // 紧贴后墙 (Z=0)
+
+  for (let i = 0; i < count; i++) {
+    const group = new THREE.Group();
+    const x = startX + i * cabW;
+
+    // 柜体
+    const body = new THREE.Mesh(new THREE.BoxGeometry(cabW, cabH, cabD), mat);
+    body.position.set(x, cabH / 2, zPos);
+    group.add(body);
+
+    // 柜门分隔线
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.01, cabH - 0.1, cabD + 0.02), lineMat);
+    line.position.set(x, cabH / 2, zPos);
+    group.add(line);
+
+    // 门把手
+    const handleL = new THREE.Mesh(new THREE.SphereGeometry(0.02), handleMat);
+    handleL.position.set(x - 0.1, cabH * 0.6, zPos + cabD / 2);
+    group.add(handleL);
+    
+    const handleR = handleL.clone();
+    handleR.position.x = x + 0.1;
+    group.add(handleR);
+
+    parent.add(group);
+  }
 }
 
 /**
@@ -577,24 +708,26 @@ function createSinglePlant() {
  */
 function createDutyRoster(parent, W, D) {
   const group = new THREE.Group();
+  const wallX = W / 2 - 0.02;
+  const zPos = -2.5; // 挪到后门与飘窗之间的实墙上，避免挂在玻璃上
 
   // 值日表底板
   const boardMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
   const board = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.7, 0.5), boardMat);
-  board.position.set(W / 2 - 0.02, 1.6, -D / 2);
+  board.position.set(wallX, 1.6, zPos);
   group.add(board);
 
   // 标题区域（红色横条）
   const titleMat = new THREE.MeshStandardMaterial({ color: 0xcc3333 });
   const title = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.48), titleMat);
-  title.position.set(W / 2 - 0.02, 1.9, -D / 2);
+  title.position.set(wallX, 1.9, zPos);
   group.add(title);
 
   // 表格线条（横线）
   const lineMat = new THREE.MeshStandardMaterial({ color: 0x999999 });
   for (let i = 0; i < 5; i++) {
     const line = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.005, 0.48), lineMat);
-    line.position.set(W / 2 - 0.02, 1.78 - i * 0.12, -D / 2);
+    line.position.set(wallX, 1.78 - i * 0.12, zPos);
     group.add(line);
   }
 
@@ -719,4 +852,111 @@ function createSchoolMotto(parent, D) {
   // 分成两块显示，增加间距
   createTextPlaque('爱 国 敬 业', -1.2);
   createTextPlaque('求 实 创 新', 1.2);
+}
+
+/**
+ * 书柜（位于左前角，放满字典）
+ */
+function createBookshelf(parent, W, D) {
+  const group = new THREE.Group();
+  const shelfX = -W / 2 + 0.6; // 靠左墙
+  const shelfZ = -D + 0.35;     // 靠前墙
+  
+  const shelfMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // 白色柜子
+  
+  const shelfW = 1.0;
+  const shelfH = 2.0;
+  const shelfD = 0.3;
+  const thickness = 0.04;
+
+  // 1. 书柜框架
+  const frameGroup = new THREE.Group();
+  
+  // 侧板 (左、右)
+  const sideGeo = new THREE.BoxGeometry(thickness, shelfH, shelfD);
+  const leftSide = new THREE.Mesh(sideGeo, shelfMat);
+  leftSide.position.set(-shelfW/2, shelfH/2, 0);
+  frameGroup.add(leftSide);
+  
+  const rightSide = new THREE.Mesh(sideGeo, shelfMat);
+  rightSide.position.set(shelfW/2, shelfH/2, 0);
+  frameGroup.add(rightSide);
+  
+  // 顶底板
+  const horGeo = new THREE.BoxGeometry(shelfW + thickness, thickness, shelfD);
+  const bottom = new THREE.Mesh(horGeo, shelfMat);
+  bottom.position.set(0, thickness/2, 0);
+  frameGroup.add(bottom);
+  
+  const top = new THREE.Mesh(horGeo, shelfMat);
+  top.position.set(0, shelfH - thickness/2, 0);
+  frameGroup.add(top);
+  
+  // 背板
+  const back = new THREE.Mesh(new THREE.BoxGeometry(shelfW + thickness, shelfH, 0.02), shelfMat);
+  back.position.set(0, shelfH/2, -shelfD/2 + 0.01);
+  frameGroup.add(back);
+  
+  // 层级 (增加4层)
+  const layerCount = 4;
+  const layerSpacing = (shelfH - thickness) / (layerCount + 1);
+  for(let i=1; i<=layerCount; i++) {
+    const layer = new THREE.Mesh(new THREE.BoxGeometry(shelfW, thickness, shelfD - 0.02), shelfMat);
+    layer.position.set(0, i * layerSpacing, 0.01);
+    frameGroup.add(layer);
+    
+    // 在每一层放满书
+    fillShelfWithBooks(frameGroup, i * layerSpacing + thickness/2, shelfW, shelfD);
+  }
+
+  group.add(frameGroup);
+  group.position.set(shelfX, 0, shelfZ);
+  parent.add(group);
+}
+
+/**
+ * 在书架层上填满字典
+ */
+function fillShelfWithBooks(group, yPos, shelfW, shelfD) {
+  const bookW = 0.06; // 字典比较厚
+  const bookH = 0.28; // 高度
+  const bookD = 0.22; // 深度
+  const availableW = shelfW - 0.1;
+  const bookCount = Math.floor(availableW / (bookW + 0.01));
+  
+  // 经典的字典配色：标准中国红、藏青蓝、深森林绿
+  const colors = [
+    0xb22222, // Firebrick Red (经典的硬壳字典红)
+    0x1a237e, // Indigo Blue (稳重的深蓝色)
+    0x1b5e20  // Dark Green (标准的工具书绿色)
+  ]; 
+  
+  for(let i=0; i<bookCount; i++) {
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const bookMat = new THREE.MeshStandardMaterial({ 
+      color: color,
+      roughness: 0.7, // 降低反光，增加纸质感
+      metalness: 0.1 
+    });
+    const book = new THREE.Mesh(new THREE.BoxGeometry(bookW, bookH, bookD), bookMat);
+    
+    // 随机微调位置和轻微倾斜，模拟真实摆放
+    const x = -availableW/2 + i * (bookW + 0.01) + bookW/2;
+    const tilt = (Math.random() - 0.5) * 0.04;
+    
+    book.position.set(x, yPos + bookH/2, 0.02);
+    book.rotation.z = tilt;
+    group.add(book);
+    
+    // 书脊加一个深金色的标签，模拟烫金工艺
+    const spineMat = new THREE.MeshStandardMaterial({ 
+      color: 0xc5a059, // 深金色/古铜色
+      metalness: 0.5,
+      roughness: 0.3
+    });
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(bookW * 0.7, bookH * 0.15, 0.01), spineMat); 
+    spine.position.set(x, yPos + bookH * 0.75, bookD/2 + 0.006);
+    spine.rotation.z = tilt;
+    group.add(spine);
+  }
 }
