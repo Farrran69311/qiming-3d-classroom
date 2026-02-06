@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Qiming 3D Classroom</title>
+    <style>
+      body {
+        margin: 0;
+        background-color: #f0f0f0;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #ui-container {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 15px;
+        border-radius: 8px;
+        font-family: sans-serif;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      select {
+        padding: 5px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui-container">
+      <label for="model-selector">选择形象：</label>
+      <select id="model-selector">
+        <option value="/models/AliciaSolid_vrm-0.51.vrm">Alicia (默认)</option>
+        <option value="/models/VRM1_Constraint_Twist_Sample.vrm">Twist Sample</option>
+        <option value="/models/2307020555850481813.vrm.glb">虚拟角色 A</option>
+        <option value="/models/3003548679065420654.vrm.glb">虚拟角色 B</option>
+      </select>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
