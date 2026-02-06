@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createClassroom } from './classroom.js';
 
 // --- 1. 基础场景初始化 ---
@@ -22,6 +26,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 软阴影
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // 电影级色调映射
+renderer.toneMappingExposure = 1.0; // 降低曝光度回到标准水平
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -156,6 +163,26 @@ if (resetBtn) {
   });
 }
 
+// --- 后期处理设置 ---
+const composer = new EffectComposer(renderer);
+
+// 1. 基础渲染通道
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+// 2. 泛光通道 (Bloom) - 让发光物体产生光晕
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.25, // 强度减半
+  0.4,  // 半径
+  0.95  // 提高阈值，只有极亮的光才会触发泛光
+);
+composer.addPass(bloomPass);
+
+// 3. 输出通道 (必须放在最后，处理颜色空间转换)
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
+
 // 初始默认加载第一个模型
 loadVRM('/models/AliciaSolid_vrm-0.51.vrm');
 
@@ -179,7 +206,7 @@ function animate() {
   camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.1, 3.4);
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, -9.8, -0.2);
 
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 animate();
@@ -190,4 +217,5 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });

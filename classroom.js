@@ -137,9 +137,9 @@ function createCeilingMaterial() {
   return new THREE.MeshStandardMaterial({ 
     map: texture,
     color: 0xcccccc, // 降低基础亮度，防止过曝
-    emissive: 0x222222, // 增加微弱自发光，确保在阴影下也能看到纹理
-    roughness: 1.0,
-    metalness: 0.0,
+    emissive: 0x111111, // 大幅降低自发光，仅保留阴影处的可见性
+    roughness: 0.8,
+    metalness: 0.2,
     side: THREE.DoubleSide
   });
 }
@@ -277,7 +277,7 @@ function createSmartDisplay(parent, D) {
     map: texture,
     emissive: 0xffffff,
     emissiveMap: texture,
-    emissiveIntensity: 0.15
+    emissiveIntensity: 0.12 // 大幅降低发射强度，防止炸屏
   });
 
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), screenMat);
