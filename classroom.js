@@ -122,53 +122,25 @@ function createFloorMaterial() {
 }
 
 /**
- * 创建天花板材质（办公室石膏板风格，带灰色间隔线）
+ * 创建天花板材质（加载外部纹理）
  */
 function createCeilingMaterial() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-
-  // 底色 - 纯白色石膏板
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, 512, 512);
-
-  // 间隔线 - 灰色
-  ctx.strokeStyle = '#cccccc';
-  ctx.lineWidth = 4;
-  const gridSize = 128; // 石膏板方块大小
-
-  for (let i = 0; i <= 512; i += gridSize) {
-    // 横线
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(512, i);
-    ctx.stroke();
-    // 纵线
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, 512);
-    ctx.stroke();
-  }
-
-  // 给石膏板加一点非常细微的凹凸感（可选）
-  for (let i = 0; i < 2000; i++) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 512;
-    const dotAlpha = Math.random() * 0.05;
-    ctx.fillStyle = `rgba(0,0,0,${dotAlpha})`;
-    ctx.fillRect(x, y, 1, 1);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
+  const loader = new THREE.TextureLoader();
+  const texture = loader.load('/textures/ceiling/TCom_OfficeCeiling_header.jpg');
+  
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(6, 5); // 对应 W=12, D=10 的比例
+  // 减少重复次数，让格子的纹理更明显
+  texture.repeat.set(4, 4); 
 
   return new THREE.MeshStandardMaterial({ 
     map: texture,
-    side: THREE.BackSide // 确保从教室内部看得到
+    color: 0xcccccc, // 降低基础亮度，防止过曝
+    emissive: 0x222222, // 增加微弱自发光，确保在阴影下也能看到纹理
+    roughness: 1.0,
+    metalness: 0.0,
+    side: THREE.DoubleSide
   });
 }
 
@@ -414,6 +386,16 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
     opacity: 0.3,
   });
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // 白色窗框
+  
+  // 大理石台板材质
+  const marbleMat = new THREE.MeshStandardMaterial({ 
+    color: 0xf0f0f0, 
+    roughness: 0.1, 
+    metalness: 0.2 
+  });
+  
+  // 暖气片材质
+  const radiatorMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
   const wallX = -W / 2;
 
@@ -450,17 +432,46 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
     const hFrame2 = hFrame.clone();
     hFrame2.position.y = winY - winH / 2;
     parent.add(hFrame2);
-    // 左右框
+    
+    // 大理石台板 (下窗框下方)
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, winW + 0.2), marbleMat);
+    sill.position.set(wallX + 0.15, winY - winH / 2 - 0.02, winZ);
+    parent.add(sill);
+
+    // 暖气片 (台板下方)
+    const radiatorGroup = new THREE.Group();
+    const radW = winW - 0.2;
+    const radH = 0.6;
+    const radThick = 0.1;
+    const colCount = 10;
+    const colSpacing = radW / colCount;
+    
+    for(let j=0; j<colCount; j++) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(radThick, radH, 0.08), radiatorMat);
+      col.position.set(0, 0, (j - (colCount-1)/2) * colSpacing);
+      radiatorGroup.add(col);
+    }
+    radiatorGroup.position.set(wallX + 0.1, (winY - winH/2) / 2, winZ);
+    parent.add(radiatorGroup);
+
+    // 左右窗框
     const vFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, winH + 0.08, 0.04), frameMat);
     vFrame.position.set(wallX + 0.02, winY, winZ - winW / 2);
-    parent.add(vFrame);
-    const vFrame2 = vFrame.clone();
-    vFrame2.position.z = winZ + winW / 2;
-    parent.add(vFrame2);
+    parent.add(vFrame); 
+    const vFrameCopy2 = vFrame.clone();
+    vFrameCopy2.position.z = winZ + winW / 2;
+    parent.add(vFrameCopy2);
+    
     // 中分线
     const midH = new THREE.Mesh(new THREE.BoxGeometry(frameThick, winH, 0.03), frameMat);
     midH.position.set(wallX + 0.02, winY, winZ);
     parent.add(midH);
+
+    // 在台板上放绿植
+    const windowPlant = createSinglePlant();
+    windowPlant.scale.set(0.6, 0.6, 0.6); // 窗台上的植物小一点
+    windowPlant.position.set(wallX + 0.15, winY - winH / 2, winZ + (Math.random() - 0.5) * 0.5);
+    parent.add(windowPlant);
   }
 }
 
