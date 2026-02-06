@@ -627,6 +627,18 @@ function createPodium(parent, D) {
   const rightBarrier = new THREE.Mesh(new THREE.BoxGeometry(barrierT, barrierH, 0.7), podMat);
   rightBarrier.position.set(0.65 - barrierT / 2, topSurfaceY + barrierH / 2, deskZ);
   parent.add(rightBarrier);
+
+  // 在讲台上也放点东西
+  const podiumStuff = new THREE.Group();
+  podiumStuff.position.set(0, topSurfaceY, deskZ);
+  addStationeryToDesk(podiumStuff, 0.01);
+  // 再多加一叠厚书
+  const bigBookGeo = new THREE.BoxGeometry(0.25, 0.08, 0.35);
+  const bigBook = new THREE.Mesh(bigBookGeo, new THREE.MeshStandardMaterial({ color: 0x8b0000 }));
+  bigBook.position.set(-0.4, 0.04, 0);
+  podiumStuff.add(bigBook);
+  
+  parent.add(podiumStuff);
 }
 
 /**
@@ -733,6 +745,75 @@ function createSingleDesk(parent, x, z, deskMat, legMat, chairMat) {
 
   group.position.set(x, 0, z);
   parent.add(group);
+
+  // 在桌面上随机添加一些文具
+  addStationeryToDesk(group, 0.735); // desktop.y(0.72) + thickness/2(0.015)
+}
+
+/**
+ * 在桌面上添加文具：书、草稿纸、卷纸等
+ * @param {THREE.Group} group 
+ * @param {number} surfaceY 
+ */
+function addStationeryToDesk(group, surfaceY) {
+  const items = new THREE.Group();
+  
+  // 1. 书本 (左侧区域)
+  const bookColors = [0x1a5fb4, 0x26a269, 0xc64600, 0x613583];
+  const numBooks = Math.floor(Math.random() * 2) + 1; // 1-2本书
+  for (let i = 0; i < numBooks; i++) {
+    const bookGeo = new THREE.BoxGeometry(0.18, 0.02, 0.24);
+    const bookMat = new THREE.MeshStandardMaterial({ color: bookColors[Math.floor(Math.random() * bookColors.length)] });
+    const book = new THREE.Mesh(bookGeo, bookMat);
+    
+    // 固定在左侧，堆叠或稍微错位
+    const stackY = surfaceY + 0.01 + (i * 0.021); // 增加 Y 偏移防止重叠
+    book.position.set(-0.25 + (Math.random() * 0.05), stackY, (Math.random() - 0.5) * 0.1);
+    book.rotation.y = (Math.random() - 0.5) * 0.2;
+    items.add(book);
+  }
+
+  // 2. 草稿纸 (中间区域)
+  const numPapers = Math.floor(Math.random() * 2) + 1;
+  for (let i = 0; i < numPapers; i++) {
+    const paperGeo = new THREE.PlaneGeometry(0.21, 0.28);
+    const paperMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, side: THREE.DoubleSide });
+    const paper = new THREE.Mesh(paperGeo, paperMat);
+    paper.rotation.x = -Math.PI / 2;
+    paper.position.set(0.1, surfaceY + 0.002 + (i * 0.002), 0.05);
+    paper.rotation.z = (Math.random() - 0.5) * 0.3;
+    items.add(paper);
+  }
+
+  // 3. 纸抽 (抽纸盒 - 右侧后方)
+  if (Math.random() > 0.4) {
+    const boxGeo = new THREE.BoxGeometry(0.12, 0.08, 0.12);
+    const boxMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb }); // 浅灰白色
+    const tissueBox = new THREE.Mesh(boxGeo, boxMat);
+    tissueBox.position.set(0.3, surfaceY + 0.04, -0.1);
+    items.add(tissueBox);
+    
+    // 顶部露出的纸巾
+    const tissueGeo = new THREE.BoxGeometry(0.06, 0.02, 0.01);
+    const tissuePaper = new THREE.Mesh(tissueGeo, new THREE.MeshStandardMaterial({ color: 0xffffff }));
+    tissuePaper.position.set(0.3, surfaceY + 0.08, -0.1);
+    items.add(tissuePaper);
+  }
+
+  // 4. 笔 (靠近纸张或书本)
+  const penGeo = new THREE.CylinderGeometry(0.005, 0.005, 0.15);
+  const penMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const pen = new THREE.Mesh(penGeo, penMat);
+  pen.rotation.x = Math.PI / 2;
+  pen.rotation.z = 1.2;
+  pen.position.set(
+    0.15,
+    surfaceY + 0.005,
+    0.2
+  );
+  items.add(pen);
+
+  group.add(items);
 }
 
 /**
@@ -779,30 +860,20 @@ function createLeftWallWithWindows(parent, W, H, D, wallMat) {
   // 2. 窗外风景（使用真实纹理）
   const sceneLoader = new THREE.TextureLoader();
 
-  // 中景：树木（窗外 3~5m，不与天空重叠）
-  const treeFiles = [
-    '/textures/Trees0030_M.png',
-    '/textures/Trees0037_M.png'
-  ];
-  const treePositions = [
-    { x: wallX - 5.0, z: -1.5, scale: 5.0 },
-    { x: wallX - 6.1, z: -5.0, scale: 5.0 },
-    { x: wallX - 4.5, z: -8.5, scale: 5.0 },
-    { x: wallX - 7.0, z: -3.5, scale: 5.0 },
-    { x: wallX - 6.2, z: -7.0, scale: 5.0 },
-  ];
-  treePositions.forEach((pos, i) => {
-    const treeTex = sceneLoader.load(treeFiles[i % treeFiles.length]);
-    treeTex.colorSpace = THREE.SRGBColorSpace;
-    const treePlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(pos.scale, pos.scale),
-      new THREE.MeshBasicMaterial({ map: treeTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide })
-    );
-    treePlane.rotation.y = Math.PI / 2;
-    // 将树木深度埋入地下一点 (从 -0.1 改为 -0.4)，防止因贴图边缘透明导致的悬空感
-    treePlane.position.set(pos.x, pos.scale / 2 - 0.4, pos.z);
-    group.add(treePlane);
-  });
+  // 远景：山脉/平原 (从 land 文件夹加载)
+  const landTex = sceneLoader.load('/textures/land/Gemini_Generated_Image_43jf5o43jf5o43jf.png');
+  landTex.colorSpace = THREE.SRGBColorSpace;
+  // 保持图片原始比例 2816 / 1536
+  const landAspect = 2816 / 1536;
+  const landH = 12;
+  const landW = landH * landAspect;
+  const landPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(landW, landH),
+    new THREE.MeshBasicMaterial({ map: landTex, transparent: true, side: THREE.DoubleSide })
+  );
+  landPlane.rotation.y = Math.PI / 2;
+  landPlane.position.set(wallX - 12, 5, -D / 2);
+  group.add(landPlane);
 
   // 近景：地面（草地 + 小路，水平铺在地上，从墙外往外延伸）
   const grassTex = sceneLoader.load('/textures/Grass0002_2_L.jpg');
@@ -1001,28 +1072,20 @@ function createRightWall(parent, W, H, D, wallMat) {
   // 右侧风景（使用真实纹理）
   const sceneLoader = new THREE.TextureLoader();
 
-  // 中景：树木（窗外 3~5m）
-  const treeFilesR = [
-    '/textures/Trees0037_M.png',
-    '/textures/Trees0030_M.png'
-  ];
-  const treePosR = [
-    { x: wallX + 5.1, z: -4.0, scale: 5.0 },
-    { x: wallX + 6.0, z: -6.5, scale: 5.0 },
-    { x: wallX + 4.5, z: -8.5, scale: 5.0 },
-  ];
-  treePosR.forEach((pos, i) => {
-    const tTex = sceneLoader.load(treeFilesR[i % treeFilesR.length]);
-    tTex.colorSpace = THREE.SRGBColorSpace;
-    const tPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(pos.scale, pos.scale),
-      new THREE.MeshBasicMaterial({ map: tTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide })
-    );
-    tPlane.rotation.y = -Math.PI / 2;
-    // 将树木深度埋入地下一点 (从 -0.1 改为 -0.4)，防止因贴图边缘透明导致的悬空感
-    tPlane.position.set(pos.x, pos.scale / 2 - 0.4, pos.z);
-    group.add(tPlane);
-  });
+  // 远景：山脉/平原 (从 land 文件夹加载)
+  const landTexR = sceneLoader.load('/textures/land/Gemini_Generated_Image_3sfuf33sfuf33sfu.png');
+  landTexR.colorSpace = THREE.SRGBColorSpace;
+  // 保持图片原始比例 1024 / 1024 = 1
+  const landAspectR = 1024 / 1024;
+  const landHR = 12;
+  const landWR = landHR * landAspectR;
+  const landPlaneR = new THREE.Mesh(
+    new THREE.PlaneGeometry(landWR, landHR),
+    new THREE.MeshBasicMaterial({ map: landTexR, transparent: true, side: THREE.DoubleSide })
+  );
+  landPlaneR.rotation.y = -Math.PI / 2;
+  landPlaneR.position.set(wallX + 12, 5, -D / 2);
+  group.add(landPlaneR);
 
   // 近景：草地
   const grassTexR = sceneLoader.load('/textures/Grass0002_2_L.jpg');

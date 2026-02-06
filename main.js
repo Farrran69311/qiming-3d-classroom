@@ -14,13 +14,13 @@ import { createClassroom } from './classroom.js';
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  45,
+  65, // 增大 FOV 从 45 到 65，获得更宽广的视野
   window.innerWidth / window.innerHeight,
   0.1,
   100.0
 );
-// 设置初始视角在第二排中心学生位置 (模拟坐姿高度)
-camera.position.set(0, 1.15, -4.9);
+// 设置初始视角在第二排中心学生位置，稍微后移并调整角度以看见一侧
+camera.position.set(2, 1.4, -4.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
