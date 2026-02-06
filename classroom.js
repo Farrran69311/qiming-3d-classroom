@@ -81,8 +81,79 @@ export function createClassroom(scene) {
   // ====== 校训 ======
   createSchoolMotto(classroom, D);
 
+  // ====== 踢脚线 (Baseboards) ======
+  addBaseboards(classroom, W, H, D);
+
+  // ====== 顶灯 (Ceiling Lights) ======
+  addCeilingLamps(classroom, W, H, D);
+
   scene.add(classroom);
   return classroom;
+}
+
+// ==================== 装饰扩充 ====================
+
+/**
+ * 添加踢脚线
+ */
+function addBaseboards(parent, W, H, D) {
+  const bbMat = new THREE.MeshStandardMaterial({ color: 0x4d3227 }); // 深色木纹
+  const h = 0.12; // 踢脚线高度
+  const d = 0.02; // 踢脚线厚度
+
+  // 前墙踢脚线
+  const bbFront = new THREE.Mesh(new THREE.BoxGeometry(W, h, d), bbMat);
+  bbFront.position.set(0, h/2, -D + d/2);
+  parent.add(bbFront);
+
+  // 后墙踢脚线
+  const bbBack = new THREE.Mesh(new THREE.BoxGeometry(W, h, d), bbMat);
+  bbBack.position.set(0, h/2, -d/2);
+  parent.add(bbBack);
+}
+
+/**
+ * 添加天花板灯管
+ */
+function addCeilingLamps(parent, W, H, D) {
+  const lampGroup = new THREE.Group();
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 1.0
+  });
+  const housingMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+
+  const rows = 3;
+  const cols = 2;
+  const spacingZ = D / (rows + 1);
+  const spacingX = W / (cols + 1);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const lx = -W/2 + (c + 1) * spacingX;
+      const lz = -(r + 1) * spacingZ;
+
+      const group = new THREE.Group();
+      // 灯壳
+      const housing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.3), housingMat);
+      group.add(housing);
+      // 灯管面
+      const lightMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), lampMat);
+      lightMesh.rotation.x = Math.PI / 2;
+      lightMesh.position.y = -0.026;
+      group.add(lightMesh);
+
+      // 实际光源
+      const pLight = new THREE.PointLight(0xffffff, 0.15, 6);
+      pLight.position.y = -0.1;
+      group.add(pLight);
+
+      group.position.set(lx, H - 0.02, lz);
+      lampGroup.add(group);
+    }
+  }
+  parent.add(lampGroup);
 }
 
 // ==================== 辅助函数 ====================
@@ -440,102 +511,134 @@ function createSingleDesk(parent, x, z, deskMat, legMat, chairMat) {
 }
 
 /**
- * 左墙（带窗户缺口）
+ * 左墙（带真实窗户缺口和窗外风景）
  */
 function createLeftWallWithWindows(parent, W, H, D, wallMat) {
+  const group = new THREE.Group();
   const windowMat = new THREE.MeshStandardMaterial({
-    color: 0x88ccff,
+    color: 0xffffff,
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.15,
+    metalness: 0.9,
+    roughness: 0.05,
   });
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // 白色窗框
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 }); // 铝合金感
   
-  // 大理石台板材质
-  const marbleMat = new THREE.MeshStandardMaterial({ 
-    color: 0xf0f0f0, 
-    roughness: 0.1, 
-    metalness: 0.2 
-  });
-  
-  // 暖气片材质
-  const radiatorMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-
   const wallX = -W / 2;
-
-  // 窗户之间和两端的实墙
-  // 3扇窗户，每扇宽1.5，高1.4，窗台高1.0
   const windowCount = 3;
-  const winW = 1.5;
-  const winH = 1.4;
-  const winY = 1.7; // 窗户中心高度
-  const winSpacing = D / (windowCount + 1);
+  const winW = 1.6;
+  const winH = 1.8;
+  const winY = 1.9; // 稍微抬高一点，给暖气片留位
+  const winZGap = D / (windowCount + 1);
 
-  // 整面左墙（底色层）
-  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(D, H), wallMat);
-  leftWall.rotation.y = Math.PI / 2;
-  leftWall.position.set(wallX, H / 2, -D / 2);
-  parent.add(leftWall);
+  // 1. 分段构建实墙，留下窗户空洞
+  const createSeg = (zStart, zEnd, y, h) => {
+    const width = Math.abs(zEnd - zStart);
+    if (width <= 0) return;
+    const seg = new THREE.Mesh(new THREE.PlaneGeometry(width, h), wallMat);
+    seg.rotation.y = Math.PI / 2;
+    seg.position.set(wallX, y, (zStart + zEnd) / 2);
+    group.add(seg);
+  };
 
-  // 在左墙上挖出窗户（用玻璃和窗框叠在墙上）
+  // 墙脚（窗台以下）
+  createSeg(0, -D, 0.5, 1.0);
+  // 墙顶（窗户以上）
+  createSeg(0, -D, (winY + winH/2 + H)/2, H - (winY + winH/2));
+  // 窗间柱和两端
+  createSeg(0, -winZGap + winW/2, winY, winH); // 后角柱
+  createSeg(-winZGap - winW/2, -2*winZGap + winW/2, winY, winH); // 柱1
+  createSeg(-2*winZGap - winW/2, -3*winZGap + winW/2, winY, winH); // 柱2
+  createSeg(-3*winZGap - winW/2, -D, winY, winH); // 前角柱
+
+  // 2. 窗外风景
+  const sceneLoader = new THREE.TextureLoader();
+  // 模拟一个远景图，这里先用 Canvas 绘制一个简单的自然风景梯度，或者你可以替换为一张图片
+  const sceneCanvas = document.createElement('canvas');
+  sceneCanvas.width = 1024;
+  sceneCanvas.height = 512;
+  const sCtx = sceneCanvas.getContext('2d');
+  const grd = sCtx.createLinearGradient(0, 0, 0, 512);
+  grd.addColorStop(0, '#4facfe'); // 深天蓝
+  grd.addColorStop(0.5, '#00f2fe'); // 浅蓝
+  grd.addColorStop(0.6, '#ffffff'); // 地平线白
+  grd.addColorStop(0.61, '#96e6a1'); // 浅绿
+  grd.addColorStop(1, '#d4fc79'); // 嫩绿
+  sCtx.fillStyle = grd;
+  sCtx.fillRect(0, 0, 1024, 512);
+
+  // 增加一些云朵
+  sCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  for(let i=0; i<8; i++) {
+    const cx = Math.random() * 1024;
+    const cy = Math.random() * 200;
+    const cr = 20 + Math.random() * 30;
+    sCtx.beginPath();
+    sCtx.arc(cx, cy, cr, 0, Math.PI * 2);
+    sCtx.arc(cx + cr, cy, cr * 0.8, 0, Math.PI * 2);
+    sCtx.arc(cx - cr, cy, cr * 0.8, 0, Math.PI * 2);
+    sCtx.fill();
+  }
+  
+  const sceneTex = new THREE.CanvasTexture(sceneCanvas);
+  const scenery = new THREE.Mesh(
+    new THREE.PlaneGeometry(D * 2, H * 2),
+    new THREE.MeshBasicMaterial({ map: sceneTex, side: THREE.DoubleSide })
+  );
+  scenery.rotation.y = Math.PI / 2;
+  scenery.position.set(wallX - 5, H / 2, -D / 2); // 放在窗外 5 米处
+  group.add(scenery);
+
+  // 3. 循环创建玻璃、窗框及附件
   for (let i = 0; i < windowCount; i++) {
-    const winZ = -(i + 1) * winSpacing;
+    const winZ = -(i + 1) * winZGap;
 
     // 玻璃
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), windowMat);
     glass.rotation.y = Math.PI / 2;
-    glass.position.set(wallX + 0.01, winY, winZ);
-    parent.add(glass);
+    glass.position.set(wallX, winY, winZ);
+    group.add(glass);
 
     // 窗框
     const frameThick = 0.04;
-    // 上下框
-    const hFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, 0.04, winW + 0.08), frameMat);
+    const hFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, winW + 0.08), frameMat);
     hFrame.position.set(wallX + 0.02, winY + winH / 2, winZ);
-    parent.add(hFrame);
+    group.add(hFrame);
     const hFrame2 = hFrame.clone();
     hFrame2.position.y = winY - winH / 2;
-    parent.add(hFrame2);
-    
-    // 大理石台板 (下窗框下方)
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, winW + 0.2), marbleMat);
-    sill.position.set(wallX + 0.15, winY - winH / 2 - 0.02, winZ);
-    parent.add(sill);
+    group.add(hFrame2);
 
-    // 暖气片 (台板下方)
+    // 大理石台板
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, winW + 0.2), new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.1 }));
+    sill.position.set(wallX + 0.15, winY - winH / 2 - 0.02, winZ);
+    group.add(sill);
+
+    // 暖气片
     const radiatorGroup = new THREE.Group();
     const radW = winW - 0.2;
-    const radH = 0.6;
-    const radThick = 0.1;
-    const colCount = 10;
-    const colSpacing = radW / colCount;
-    
+    const radH = 0.65;
+    const colCount = 12;
     for(let j=0; j<colCount; j++) {
-      const col = new THREE.Mesh(new THREE.BoxGeometry(radThick, radH, 0.08), radiatorMat);
-      col.position.set(0, 0, (j - (colCount-1)/2) * colSpacing);
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.08, radH, 0.08), new THREE.MeshStandardMaterial({color: 0xffffff}));
+      col.position.z = (j - (colCount-1)/2) * (radW / colCount);
       radiatorGroup.add(col);
     }
-    radiatorGroup.position.set(wallX + 0.1, (winY - winH/2) / 2, winZ);
-    parent.add(radiatorGroup);
+    radiatorGroup.position.set(wallX + 0.1, 0.5, winZ);
+    group.add(radiatorGroup);
 
-    // 左右窗框
-    const vFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, winH + 0.08, 0.04), frameMat);
+    // 左右窗框及中分线
+    const vFrame = new THREE.Mesh(new THREE.BoxGeometry(0.08, winH + 0.08, 0.06), frameMat);
     vFrame.position.set(wallX + 0.02, winY, winZ - winW / 2);
-    parent.add(vFrame); 
+    group.add(vFrame); 
     const vFrameCopy2 = vFrame.clone();
     vFrameCopy2.position.z = winZ + winW / 2;
-    parent.add(vFrameCopy2);
+    group.add(vFrameCopy2);
     
-    // 中分线
-    const midH = new THREE.Mesh(new THREE.BoxGeometry(frameThick, winH, 0.03), frameMat);
-    midH.position.set(wallX + 0.02, winY, winZ);
-    parent.add(midH);
-
-    // 在台板上放绿植
-    const windowPlant = createSinglePlant();
-    windowPlant.scale.set(0.6, 0.6, 0.6); // 窗台上的植物小一点
-    windowPlant.position.set(wallX + 0.15, winY - winH / 2, winZ + (Math.random() - 0.5) * 0.5);
-    parent.add(windowPlant);
+    const midV = new THREE.Mesh(new THREE.BoxGeometry(0.06, winH, 0.04), frameMat);
+    midV.position.set(wallX + 0.02, winY, winZ);
+    group.add(midV);
   }
+  parent.add(group);
 }
 
 /**
@@ -546,48 +649,48 @@ function createRightWall(parent, W, H, D, wallMat) {
   const wallX = W / 2;
   const doorW = 0.9;
   const doorH = 2.0;
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0xcd853f }); // 木质门
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee }); // 白色门框
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.3 });
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0xcd853f }); 
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 }); 
+  const glassMat = new THREE.MeshStandardMaterial({ 
+    color: 0xffffff, 
+    transparent: true, 
+    opacity: 0.15, 
+    metalness: 0.9, 
+    roughness: 0.05 
+  });
 
   // 1. 基础实墙（分段拼接，避开门和窗的位置）
   const createWallSegment = (zStart, zEnd, xPos, h, y) => {
     const width = Math.abs(zEnd - zStart);
+    if (width <= 0) return;
     const seg = new THREE.Mesh(new THREE.PlaneGeometry(width, h), wallMat);
     seg.rotation.y = -Math.PI / 2;
     seg.position.set(xPos, y, (zStart + zEnd) / 2);
     group.add(seg);
   };
 
-  // 分段绘制右墙（以避开门 Z: -1.0, -9.0 和 飘窗 Z: -3.5~-6.5）
-  // 底部（门和窗台以下的墙）
-  createWallSegment(0, -0.5, wallX, H, H/2); // 后角
-  createWallSegment(-1.4, -3.5, wallX, H, H/2); // 后门与窗之间
-  createWallSegment(-6.5, -8.6, wallX, H, H/2); // 前门与窗之间
-  createWallSegment(-9.5, -10, wallX, H, H/2); // 前角
+  createWallSegment(0, -0.5, wallX, H, H/2); 
+  createWallSegment(-1.4, -3.5, wallX, H, H/2); 
+  createWallSegment(-6.5, -8.6, wallX, H, H/2); 
+  createWallSegment(-9.5, -10, wallX, H, H/2); 
 
   // 2. 门逻辑
   const createDoor = (z) => {
-    const doorGroup = new THREE.Group();
-    // 门体
     const door = new THREE.Mesh(new THREE.BoxGeometry(0.05, doorH, doorW), doorMat);
     door.position.set(wallX, doorH / 2, z);
     group.add(door);
-    // 门框
     const topFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, doorW + 0.1), frameMat);
     topFrame.position.set(wallX, doorH + 0.025, z);
     group.add(topFrame);
-    // 门窗（门上的小视窗）
     const doorWin = new THREE.Mesh(new THREE.PlaneGeometry(doorW * 0.4, 0.5), glassMat);
     doorWin.rotation.y = -Math.PI / 2;
     doorWin.position.set(wallX - 0.03, doorH * 0.7, z);
     group.add(doorWin);
-    // 门上方补齐的墙
     createWallSegment(z - doorW/2, z + doorW/2, wallX, H - doorH - 0.05, (H + doorH + 0.05)/2);
   };
 
-  createDoor(-0.95); // 后门
-  createDoor(-9.05); // 前门
+  createDoor(-0.95); 
+  createDoor(-9.05); 
 
   // 3. 飘窗逻辑 (Z: -3.5 ~ -6.5)
   const winW = 3.0;
@@ -595,36 +698,50 @@ function createRightWall(parent, W, H, D, wallMat) {
   const winY = 1.8;
   const winDepth = 0.4;
   
-  // 飘窗底座部分（室内）
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.1, winW), new THREE.MeshStandardMaterial({ color: 0xf5f5f5 }));
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.1, winW), new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.1 }));
   sill.position.set(wallX - winDepth/2, 1.0, -5.0);
   group.add(sill);
   
-  // 飘窗玻璃（向外突出一点）
-  const glass = new THREE.Mesh(new THREE.BoxGeometry(0.01, winH, winW), glassMat);
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), glassMat);
+  glass.rotation.y = -Math.PI / 2;
   glass.position.set(wallX + winDepth, winY, -5.0);
   group.add(glass);
 
-  // 飘窗侧面玻璃
-  const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(winDepth, winH, 0.01), glassMat);
+  const sideGlass = new THREE.Mesh(new THREE.PlaneGeometry(winDepth, winH), glassMat);
   sideGlass.position.set(wallX + winDepth/2, winY, -5.0 + winW/2);
   group.add(sideGlass);
   const sideGlass2 = sideGlass.clone();
   sideGlass2.position.z = -5.0 - winW/2;
   group.add(sideGlass2);
 
-  // 飘窗顶部和底部封闭（向外突出的部分）
   const winExtenMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
-  const winTop = new THREE.Mesh(new THREE.BoxGeometry(winDepth, 0.05, winW), winExtenMat);
+  const winTop = new THREE.Mesh(new THREE.BoxGeometry(winDepth + 0.01, 0.05, winW + 0.01), winExtenMat);
   winTop.position.set(wallX + winDepth/2, winY + winH/2, -5.0);
   group.add(winTop);
   const winBottom = winTop.clone();
   winBottom.position.y = winY - winH/2;
   group.add(winBottom);
 
-  // 飘窗上下方补齐的墙
-  createWallSegment(-3.5, -6.5, wallX, 1.0, 0.5); // 窗户下方
-  createWallSegment(-3.5, -6.5, wallX, H - (winY + winH/2), (H + (winY + winH/2))/2); // 窗户上方
+  createWallSegment(-3.5, -6.5, wallX, 1.0, 0.5); 
+  createWallSegment(-3.5, -6.5, wallX, H - (winY + winH/2), (H + (winY + winH/2))/2);
+
+  // 右侧风景
+  const sceneCanvas = document.createElement('canvas');
+  sceneCanvas.width = 1024; sceneCanvas.height = 512;
+  const sCtx = sceneCanvas.getContext('2d');
+  const grd = sCtx.createLinearGradient(0, 0, 0, 512);
+  grd.addColorStop(0, '#4facfe'); grd.addColorStop(0.5, '#00f2fe'); grd.addColorStop(0.6, '#ffffff'); grd.addColorStop(0.61, '#96e6a1'); grd.addColorStop(1, '#d4fc79');
+  sCtx.fillStyle = grd; sCtx.fillRect(0, 0, 1024, 512);
+  sCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  for(let i=0; i<6; i++) {
+    const cx = Math.random() * 1024; const cy = Math.random() * 150; const cr = 25;
+    sCtx.beginPath(); sCtx.arc(cx, cy, cr, 0, Math.PI * 2); sCtx.fill();
+  }
+  const sceneTex = new THREE.CanvasTexture(sceneCanvas);
+  const scenery = new THREE.Mesh(new THREE.PlaneGeometry(D * 2, H * 2), new THREE.MeshBasicMaterial({ map: sceneTex, side: THREE.DoubleSide }));
+  scenery.rotation.y = -Math.PI / 2;
+  scenery.position.set(wallX + 8, H / 2, -D / 2); 
+  group.add(scenery);
 
   parent.add(group);
 }
@@ -636,10 +753,23 @@ function createWindowLights(scene, W, H, D) {
   const windowCount = 3;
   const winSpacing = D / (windowCount + 1);
 
+  // 模拟从左侧窗户射入的阳光
+  const sunLight = new THREE.DirectionalLight(0xfff5e1, 0.4);
+  sunLight.position.set(-15, 10, -5);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 1024;
+  sunLight.shadow.mapSize.height = 1024;
+  sunLight.shadow.camera.left = -10;
+  sunLight.shadow.camera.right = 10;
+  sunLight.shadow.camera.top = 10;
+  sunLight.shadow.camera.bottom = -10;
+  scene.add(sunLight);
+
   for (let i = 0; i < windowCount; i++) {
     const winZ = -(i + 1) * winSpacing;
-    const light = new THREE.PointLight(0xffffee, 0.6, 8);
-    light.position.set(-W / 2 + 0.5, H * 0.6, winZ);
+    const light = new THREE.PointLight(0xffffee, 0.3, 10);
+    light.position.set(-W / 2 + 0.1, 2.0, winZ);
+    // 增加一点漫反射感，不投影（投影交给 Sunlight）
     scene.add(light);
   }
 }
