@@ -14,7 +14,12 @@ export function createClassroom(scene) {
   const H = 3.5;    // 高度 (Y)
 
   // ====== 材质定义 ======
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }); // 白色墙壁
+  const wallMat = new THREE.MeshStandardMaterial({ 
+    color: 0xffffff, 
+    side: THREE.DoubleSide,
+    roughness: 0.9, // 哑光墙面
+    metalness: 0.0
+  }); // 白色墙壁
   const floorMat = createFloorMaterial();           // 带网格的地板
 
   // ====== 地板 ======
@@ -86,8 +91,11 @@ export function createClassroom(scene) {
   // ====== 广播喇叭 (Speakers) ======
   addBroadcasters(classroom, W, D);
 
-  // ====== 360度天空围幕（4面平面，从地面开始） ======
-  createSkySurround(classroom, W, D);
+  // ====== 饮水机 (Water Dispenser) ======
+  createWaterDispenser(classroom, D);
+
+  // ====== 360度天空围幕（已移除，改为 main.js 中的 scene.background/environment） ======
+  // createSkySurround(classroom, W, D);
 
   scene.add(classroom);
   return classroom;
@@ -218,9 +226,9 @@ function createFloorMaterial() {
 
   return new THREE.MeshStandardMaterial({ 
     map: texture,
-    roughness: 0.4,
-    metalness: 0.1,
-    emissive: 0x333333
+    roughness: 0.15, // 降低粗糙度，增加大理石质感和反射
+    metalness: 0.2,  // 略微增加金属属性以增强环境贴图反射
+    emissive: 0x000000 // 移除自发光，靠光照渲染
   });
 }
 
@@ -521,7 +529,7 @@ function createSmartDisplay(parent, D) {
     map: texture,
     emissive: 0xffffff,
     emissiveMap: texture,
-    emissiveIntensity: 0.12 // 大幅降低发射强度，防止炸屏
+    emissiveIntensity: 0.3 // 降低发射强度，防止过亮
   });
 
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), screenMat);
@@ -563,7 +571,7 @@ function createPodium(parent, D) {
   }); 
 
   // 1. 讲台地坪 (俯视图梯形：绝大部分为直边，仅前端带小切角防止绊倒)
-  const pHeight = 0.15;
+  const pHeight = 0.25; // 增加讲台地坪高度，让老师站得更高
   const pDepth = 1.3;
   const straightDepth = 1.15; // 绝大部分(1.15m)是直边
   
@@ -821,14 +829,17 @@ function addStationeryToDesk(group, surfaceY) {
  */
 function createLeftWallWithWindows(parent, W, H, D, wallMat) {
   const group = new THREE.Group();
-  const windowMat = new THREE.MeshStandardMaterial({
+  const windowMat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
+    metalness: 0,
+    roughness: 0,
+    transmission: 1.0, // 实体玻璃透光性
+    thickness: 0.1,    // 玻璃折射厚度
     transparent: true,
-    opacity: 0.15,
-    metalness: 0.9,
-    roughness: 0.05,
+    opacity: 0.3,
+    envMapIntensity: 1.0
   });
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0 }); // 铝合金感
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.2, metalness: 0.8 }); // 铝合金感
   
   const wallX = -W / 2;
   const windowCount = 3;
@@ -1596,5 +1607,55 @@ function addBroadcasters(parent, W, D) {
   createSpeaker(-4.0);
   createSpeaker(4.0);
 
+  parent.add(group);
+}
+
+/**
+ * 饮水机 (放在黑板右侧空位)
+ */
+function createWaterDispenser(parent, D) {
+  const group = new THREE.Group();
+  
+  // 1. 底座柜子
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.9, 0.4), baseMat);
+  base.position.y = 0.45;
+  group.add(base);
+
+  // 2. 饮水机主体 (上半部分)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 0.38), baseMat);
+  body.position.y = 1.1;
+  group.add(body);
+
+  // 3. 水桶 (蓝色半透明)
+  const bottleMat = new THREE.MeshPhysicalMaterial({ 
+    color: 0x00aaff, 
+    transparent: true, 
+    opacity: 0.6, 
+    transmission: 0.8,
+    roughness: 0.1,
+    thickness: 0.05
+  });
+  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.45, 16), bottleMat);
+  bottle.position.y = 1.5;
+  group.add(bottle);
+  
+  // 水桶顶部圆头
+  const bottleTop = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), bottleMat);
+  bottleTop.position.y = 1.725;
+  group.add(bottleTop);
+
+  // 4. 出水口和接水槽
+  const grayMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 0.15), grayMat);
+  tray.position.set(0, 1.0, 0.15);
+  group.add(tray);
+
+  const tap = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.04), grayMat);
+  tap.position.set(0, 1.15, 0.12);
+  group.add(tap);
+
+  // 放置位置：黑板右侧 (黑板右边缘约 3.9, 墙在 6.0)
+  group.position.set(5.0, 0, -D + 0.22); 
   parent.add(group);
 }

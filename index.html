@@ -39,9 +39,56 @@
       button:hover {
         background: #357abd;
       }
+      #lock-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #333;
+        border: none;
+        padding: 0;
+        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        z-index: 1000;
+        transition: all 0.3s ease;
+      }
+      #lock-btn svg {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
+      }
+      #lock-btn.unlocked {
+        background: #4a90d9;
+        color: white;
+      }
+      #lock-btn .icon-unlock {
+        display: none;
+      }
+      #lock-btn.unlocked .icon-lock {
+        display: none;
+      }
+      #lock-btn.unlocked .icon-unlock {
+        display: block;
+      }
     </style>
   </head>
   <body>
+    <button id="lock-btn" title="锁定/解锁视角">
+      <!-- 锁定图标 -->
+      <svg class="icon-lock" viewBox="0 0 24 24">
+        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+      </svg>
+      <!-- 解锁图标 -->
+      <svg class="icon-unlock" viewBox="0 0 24 24">
+        <path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z"/>
+      </svg>
+    </button>
     <div id="ui-container">
       <div class="ui-row">
         <label for="model-selector">选择形象：</label>
