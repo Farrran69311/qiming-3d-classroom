@@ -1627,23 +1627,36 @@ function createWaterDispenser(parent, D) {
   body.position.y = 1.1;
   group.add(body);
 
-  // 3. 水桶 (蓝色半透明)
+  // 3. 水桶 (蓝色半透明，改为标准的圆柱状桶)
   const bottleMat = new THREE.MeshPhysicalMaterial({ 
-    color: 0x00aaff, 
+    color: 0x22ccff, 
     transparent: true, 
-    opacity: 0.6, 
-    transmission: 0.8,
-    roughness: 0.1,
+    opacity: 0.5, 
+    transmission: 0.9,
+    roughness: 0.05,
     thickness: 0.05
   });
-  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.45, 16), bottleMat);
-  bottle.position.y = 1.5;
-  group.add(bottle);
   
-  // 水桶顶部圆头
-  const bottleTop = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), bottleMat);
-  bottleTop.position.y = 1.725;
+  // 桶身 (主要柱体)
+  const bottleBody = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.45, 32), bottleMat);
+  bottleBody.position.y = 1.525;
+  group.add(bottleBody);
+  
+  // 桶顶 (略微圆润的顶部柱体)
+  const bottleTop = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.05, 32), bottleMat);
+  bottleTop.position.y = 1.775;
   group.add(bottleTop);
+
+  // 增加桶身上的加强筋 (横向环绕圆柱)
+  const ringGeo = new THREE.TorusGeometry(0.141, 0.005, 8, 32);
+  const ring1 = new THREE.Mesh(ringGeo, bottleMat);
+  ring1.position.y = 1.45;
+  ring1.rotation.x = Math.PI / 2;
+  group.add(ring1);
+  
+  const ring2 = ring1.clone();
+  ring2.position.y = 1.6;
+  group.add(ring2);
 
   // 4. 出水口和接水槽
   const grayMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
