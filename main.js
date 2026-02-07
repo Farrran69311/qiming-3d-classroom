@@ -68,17 +68,29 @@ const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6); // 增加�
 hemiLight.position.set(0, 20, 0);
 scene.add(hemiLight);
 
+// 窗户侧补光（模拟窗外散射光，增加真实室内光照层次）
+const fillLight = new THREE.DirectionalLight(0xfff0dd, 0.3);
+fillLight.position.set(-8, 6, -5);
+fillLight.castShadow = false; // 补光不投射阴影
+scene.add(fillLight);
+
+// 教室内微弱暖色调补光（模拟间接光反射）
+const bounceLight = new THREE.PointLight(0xffe8d0, 0.15, 20);
+bounceLight.position.set(0, 0.3, -5); // 地面反弹光
+scene.add(bounceLight);
+
 const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // 增强主灯
 directionalLight.position.set(5, 12, 8);
 directionalLight.castShadow = true;
 // 优化阴影质量
-directionalLight.shadow.mapSize.set(2048, 2048);
+directionalLight.shadow.mapSize.set(4096, 4096); // 提升阴影分辨率
 directionalLight.shadow.camera.left = -15;
 directionalLight.shadow.camera.right = 15;
 directionalLight.shadow.camera.top = 15;
 directionalLight.shadow.camera.bottom = -15;
-directionalLight.shadow.bias = -0.0005; 
+directionalLight.shadow.bias = -0.0003; // 微调偏移减少阴影瘗疮
 directionalLight.shadow.normalBias = 0.02; // 防止阴影条纹
+directionalLight.shadow.radius = 3; // 软阴影模糊半径
 scene.add(directionalLight);
 
 // --- 创建教室背景 ---
@@ -276,19 +288,19 @@ composer.addPass(renderPass);
 // 2. 环境光遮蔽 (SAO) - 增加角落和接触面的深度感
 const saoPass = new SAOPass(scene, camera);
 saoPass.params.output = SAOPass.OUTPUT.Default;
-saoPass.params.saoBias = 0.5;
-saoPass.params.saoIntensity = 0.02; // 稍微增加强度
-saoPass.params.saoScale = 10;
-saoPass.params.saoKernelRadius = 16;
-saoPass.params.saoMinResolution = 0;
+saoPass.params.saoBias = 1.0;
+saoPass.params.saoIntensity = 0.008; // 极低强度避免闪烁
+saoPass.params.saoScale = 5;
+saoPass.params.saoKernelRadius = 8; // 缩小采样半径
+saoPass.params.saoMinResolution = 0.005; // 提高最小分辨率阈值，过滤远处噪点
 composer.addPass(saoPass);
 
-// 3. 泛光通道 (Bloom) - 让发光物体产生光晕
+// 3. 泛光通道 (Bloom) - 柔和自然的光晕效果
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.3,  // 稍微降低强度
-  0.4,  // 半径
-  0.95  // 调高阈值，只让极亮处产生光晕
+  0.15,  // 大幅降低强度，减少圆形光晕
+  0.8,   // 增大半径使光晕更分散柔和
+  0.98   // 极高阈值，只让最亮处产生微弱光晕
 );
 composer.addPass(bloomPass);
 

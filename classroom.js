@@ -27,6 +27,7 @@ export function createClassroom(scene) {
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, -D / 2);
   floor.receiveShadow = true;
+  floor.castShadow = false;
   classroom.add(floor);
 
   // ====== 天花板（两种纹理交替拼接） ======
@@ -35,12 +36,14 @@ export function createClassroom(scene) {
   // ====== 前墙（黑板墙，在人物背后） ======
   const frontWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), wallMat);
   frontWall.position.set(0, H / 2, -D);
+  frontWall.receiveShadow = true;
   classroom.add(frontWall);
 
   // ====== 后墙 ======
   const backWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), wallMat);
   backWall.position.set(0, H / 2, 0);
   backWall.rotation.y = Math.PI;
+  backWall.receiveShadow = true;
   classroom.add(backWall);
 
   // ====== 左墙（带窗户缺口） ======
@@ -64,8 +67,14 @@ export function createClassroom(scene) {
   // ====== 窗户光照效果 ======
   createWindowLights(scene, W, H, D);
 
+  // ====== 阳光光束 (God Rays) ======
+  createSunBeams(classroom, W, H, D);
+
   // ====== 柜子（右墙靠后方） ======
   createCabinet(classroom, W, D);
+
+  // ====== 后排黑板 (根据参考图添加) ======
+  createBackBlackboard(classroom, W, D);
 
   // ====== 书柜（左前角，放字典） ======
   createBookshelf(classroom, W, D);
@@ -247,16 +256,16 @@ function createCeilingTiles(parent, W, H, D) {
   const matA = new THREE.MeshStandardMaterial({
     map: texA,
     color: 0xffffff,
-    emissive: 0x444444,
-    roughness: 0.95,
+    emissive: 0x888888,
+    roughness: 0.85,
     metalness: 0.0,
     side: THREE.DoubleSide
   });
   const matB = new THREE.MeshStandardMaterial({
     map: texB,
     color: 0xffffff,
-    emissive: 0x444444,
-    roughness: 0.95,
+    emissive: 0x888888,
+    roughness: 0.85,
     metalness: 0.0,
     side: THREE.DoubleSide
   });
@@ -607,7 +616,9 @@ function createPodium(parent, D) {
   // 2. 老师讲桌 (直接放在地板上，位于地坪前方)
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.6), podMat);
   // 讲柜中心移至离前墙 1.6m 处
-  body.position.set(0, 0.5, -D + 1.6); 
+  body.position.set(0, 0.5, -D + 1.6);
+  body.castShadow = true;
+  body.receiveShadow = true;
   parent.add(body);
 
   // 讲台面板（讲桌顶部的倾斜面板）
@@ -690,6 +701,8 @@ function createSingleDesk(parent, x, z, deskMat, legMat, chairMat) {
   // 桌面
   const desktop = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.03, 0.5), deskMat);
   desktop.position.set(0, 0.72, 0);
+  desktop.castShadow = true;
+  desktop.receiveShadow = true;
   group.add(desktop);
 
   // 书桌堂（桌面下的储物槽）
@@ -732,6 +745,8 @@ function createSingleDesk(parent, x, z, deskMat, legMat, chairMat) {
   // 椅面
   const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.4), chairMat);
   seat.position.set(0, 0.42, 0.5);
+  seat.castShadow = true;
+  seat.receiveShadow = true;
   group.add(seat);
 
   // 椅腿
@@ -749,6 +764,7 @@ function createSingleDesk(parent, x, z, deskMat, legMat, chairMat) {
   // 椅背
   const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.03), chairMat);
   backrest.position.set(0, 0.62, 0.68);
+  backrest.castShadow = true;
   group.add(backrest);
 
   group.position.set(x, 0, z);
@@ -1158,73 +1174,680 @@ function createWindowLights(scene, W, H, D) {
 }
 
 /**
+ * 创建左侧窗户射入的阳光光束 (God Rays / Tyndall Effect)
+ * 通过半透明渐变几何体模拟真实的光路效果
+ */
+function createSunBeams(parent, W, H, D) {
+  const beamCount = 3;
+  const winSpacing = D / (beamCount + 1);
+  const winY = 1.9; // 窗户中心高度
+
+  // 1. 顶点着色器
+  const vertexShader = `
+    varying vec2 vUv;
+    varying float vY;
+    void main() {
+      vUv = uv;
+      vY = position.y; 
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  // 2. 片元着色器：柔和自然的光束效果，增加模糊和渐变
+  const fragmentShader = `
+    varying vec2 vUv;
+    varying float vY;
+    uniform vec3 color;
+    uniform float opacity;
+    void main() {
+      // 垂直渐变 - 更平滑的衰减曲线
+      float fade = smoothstep(-7.0, -0.5, vY); 
+      fade = fade * fade; // 平方衰减，让光束更柔和
+      
+      // 边缘羽化 - 使用更宽的高斯模糊模拟
+      float edge = 1.0 - abs(vUv.x - 0.5) * 2.0;
+      edge = pow(edge, 3.0); // 增大指数，边缘更柔
+      edge = smoothstep(0.0, 1.0, edge); // 额外平滑处理
+
+      // 模拟空气中的轻微波动（减弱噪点感）
+      float noise = sin(vY * 4.0) * 0.05 + 0.95;
+
+      // 总体透明度降低，使光束更自然不刺眼
+      gl_FragColor = vec4(color, fade * edge * opacity * noise * 0.7);
+    }
+  `;
+
+  const beamMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0xfff8e1) }, // 偏暖的阳光色
+      opacity: { value: 0.10 } // 降低不透明度，光束更自然
+    },
+    vertexShader,
+    fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide
+  });
+
+  const beamH = 8.0;
+
+  for (let i = 0; i < beamCount; i++) {
+    const winZ = -(i + 1) * winSpacing;
+    
+    // 顶端小、底端大的圆柱体（模拟扩散）- 增加分段数以获得更平滑的渐变
+    const geometry = new THREE.CylinderGeometry(0.6, 3.0, beamH, 48, 8, true);
+    geometry.translate(0, -beamH / 2, 0); // 将旋转支点移至顶端
+    
+    const beam = new THREE.Mesh(geometry, beamMat);
+    
+    // 定位到窗户上边缘
+    beam.position.set(-W / 2 + 0.1, winY + 0.8, winZ);
+    
+    // 旋转：Z轴向室内倾斜，X轴稍微错开
+    beam.rotation.z = Math.PI / 3.5; 
+    beam.rotation.x = Math.PI / 20; 
+
+    parent.add(beam);
+
+    // 3. 简单的尘埃粒子效果
+    const dustCount = 150;
+    const dustGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(dustCount * 3);
+    for (let j = 0; j < dustCount; j++) {
+      // 尘埃分布在光束的圆锥空间内
+      const dist = Math.random();
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.5 + dist * 2.0;
+      const y = -dist * beamH;
+      
+      positions[j * 3] = Math.cos(angle) * radius * Math.random();
+      positions[j * 3 + 1] = y;
+      positions[j * 3 + 2] = Math.sin(angle) * radius * Math.random();
+    }
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const dustMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.015,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    
+    const dust = new THREE.Points(dustGeo, dustMat);
+    beam.add(dust); // 将尘埃绑定到光束上，随之旋转
+  }
+}
+
+/**
  * 柜子（右墙靠后方）
  */
 /**
- * 柜子（靠后墙一横排）
+ * 柜子（精细化格子与柜门：包含框架缝隙、多色阶梯布局 + 木纹细节）
  */
 function createCabinet(parent, W, D) {
+  const group = new THREE.Group();
   const loader = new THREE.TextureLoader();
-  const cabinetTex = loader.load('/textures/WoodFine0033_8_L.jpg');
-  cabinetTex.colorSpace = THREE.SRGBColorSpace;
-  cabinetTex.wrapS = THREE.RepeatWrapping;
-  cabinetTex.wrapT = THREE.RepeatWrapping;
-  cabinetTex.repeat.set(1, 1);
 
-  const mat = new THREE.MeshStandardMaterial({ 
-    map: cabinetTex,
-    roughness: 0.6,
-    metalness: 0.05
+  // ============ 尺寸参数 ============
+  const totalW = 7.2;
+  const totalH = 1.8;
+  const cabinetD = 0.35;
+  const zPos = -cabinetD / 2 - 0.12;
+
+  // ============ 基础材质（柜体本身） ============
+  const texBase = loader.load('/textures/WoodFine0023_L.jpg');
+  texBase.colorSpace = THREE.SRGBColorSpace;
+  texBase.wrapS = THREE.RepeatWrapping;
+  texBase.wrapT = THREE.RepeatWrapping;
+  texBase.repeat.set(8, 2);
+  const baseMat = new THREE.MeshStandardMaterial({
+    map: texBase,
+    color: 0xddccbb,
+    roughness: 0.7,
   });
-  const lineMat = new THREE.MeshStandardMaterial({ color: 0x8a6535 });
-  const handleMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
 
-  const cabW = 1.0;
-  const cabH = 1.2;
-  const cabD = 0.5;
-  const count = 8; // 放置8个柜子组成一排
-  const totalW = count * cabW;
-  const startX = -totalW / 2 + cabW / 2;
-  const zPos = -cabD / 2 - 0.05; // 紧贴后墙 (Z=0)
+  // ============ 柜门正方形材质（另一种不同的贴图） ============
+  const texDoor = loader.load('/textures/WoodFine0033_8_L.jpg');
+  texDoor.colorSpace = THREE.SRGBColorSpace;
+  texDoor.wrapS = THREE.RepeatWrapping;
+  texDoor.wrapT = THREE.RepeatWrapping;
+  texDoor.repeat.set(1, 1);
+  const doorMat = new THREE.MeshStandardMaterial({
+    map: texDoor,
+    color: 0xffffff,
+    roughness: 0.45,
+    side: THREE.DoubleSide,
+  });
 
-  for (let i = 0; i < count; i++) {
-    const x = startX + i * cabW;
+  const lockMat = new THREE.MeshStandardMaterial({ color: 0x95a5a6, metalness: 0.3, roughness: 0.5 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x665544, roughness: 0.8 });
 
-    // 柜体
-    const body = new THREE.Mesh(new THREE.BoxGeometry(cabW, cabH, cabD), mat);
-    body.position.set(x, cabH / 2, zPos);
-    parent.add(body);
+  // ============ 1. 长方形柜体主体 ============
+  const bodyMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(totalW, totalH, cabinetD),
+    baseMat
+  );
+  bodyMesh.position.set(0, totalH / 2, zPos);
+  bodyMesh.castShadow = true;
+  bodyMesh.receiveShadow = true;
+  group.add(bodyMesh);
 
-    // 创建小储物格的线（2列 x 3层 = 6个小格子）
-    const cols = 2;
-    const rows = 3;
-    
-    // 垂直分隔线
-    for (let c = 0; c <= cols; c++) {
-      const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.01, cabH, 0.01), lineMat);
-      vLine.position.set(x - cabW/2 + c*(cabW/cols), cabH/2, zPos + cabD/2 + 0.005);
-      parent.add(vLine);
-    }
-    
-    // 水平分隔线
-    for (let r = 0; r <= rows; r++) {
-      const hLine = new THREE.Mesh(new THREE.BoxGeometry(cabW, 0.01, 0.01), lineMat);
-      hLine.position.set(x, r*(cabH/rows), zPos + cabD/2 + 0.005);
-      parent.add(hLine);
-    }
+  // ============ 2. 正方形柜门铺满 ============
+  const doorSize = 0.38;
+  const doorGap = 0.06;
+  const step = doorSize + doorGap;
 
-    // 为每个小格子添加把手
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const handle = new THREE.Mesh(new THREE.SphereGeometry(0.015), handleMat);
-        // 把手位置在每个格子的右上角一点
-        const hX = x - cabW/2 + (c + 0.8) * (cabW/cols);
-        const hY = (r + 0.5) * (cabH/rows);
-        handle.position.set(hX, hY, zPos + cabD/2 + 0.01);
-        parent.add(handle);
-      }
+  const cols = Math.floor((totalW - doorGap) / step);
+  const rows = Math.floor((totalH - doorGap) / step);
+
+  const gridW = cols * step - doorGap;
+  const gridH = rows * step - doorGap;
+  const offsetX = -gridW / 2 + doorSize / 2;
+  const offsetY = (totalH - gridH) / 2 + doorSize / 2;
+
+  const doorZ = zPos + cabinetD / 2 + 0.005;
+
+  const doorGeo = new THREE.PlaneGeometry(doorSize, doorSize);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = offsetX + c * step;
+      const y = offsetY + r * step;
+
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position.set(x, y, doorZ);
+      group.add(door);
+
+      const lock = new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.08, 0.01),
+        lockMat
+      );
+      lock.position.set(x - doorSize / 2 + 0.05, y, doorZ + 0.006);
+      group.add(lock);
     }
   }
+
+  // ============ 3. 底部踢脚线 ============
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(totalW + 0.04, 0.06, cabinetD + 0.04),
+    frameMat
+  );
+  base.position.set(0, 0.03, zPos);
+  group.add(base);
+
+  // ============ 4. 顶部压边 ============
+  const topTrim = new THREE.Mesh(
+    new THREE.BoxGeometry(totalW + 0.04, 0.04, cabinetD + 0.04),
+    frameMat
+  );
+  topTrim.position.set(0, totalH + 0.02, zPos);
+  group.add(topTrim);
+
+  parent.add(group);
+}
+
+/**
+ * 在后排储物柜上方创建一个简单的黑板（参考用户图片）
+ */
+function createBackBlackboard(parent, W, D) {
+  const boardW = 8.0;
+  const boardH = 1.2;
+  const boardY = 2.4; // 位于柜子 (max H=1.8) 之上
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x8B7355, roughness: 0.6 }); // 木质边框
+
+  const group = new THREE.Group();
+
+  // ====== 板报底板（红色软木板背景）======
+  const boardBgCanvas = document.createElement('canvas');
+  boardBgCanvas.width = 2048;
+  boardBgCanvas.height = 512;
+  const bgCtx = boardBgCanvas.getContext('2d');
+
+  // 深红色软木背景
+  bgCtx.fillStyle = '#8b1a1a';
+  bgCtx.fillRect(0, 0, 2048, 512);
+
+  // 添加软木纹理噪点
+  for (let i = 0; i < 3000; i++) {
+    const x = Math.random() * 2048;
+    const y = Math.random() * 512;
+    const r = Math.random() * 2 + 0.5;
+    bgCtx.fillStyle = `rgba(${160 + Math.random() * 40}, ${30 + Math.random() * 20}, ${20 + Math.random() * 20}, 0.15)`;
+    bgCtx.beginPath();
+    bgCtx.arc(x, y, r, 0, Math.PI * 2);
+    bgCtx.fill();
+  }
+
+  const boardBgTex = new THREE.CanvasTexture(boardBgCanvas);
+
+  const boardMat = new THREE.MeshStandardMaterial({ 
+    map: boardBgTex,
+    roughness: 0.9 
+  });
+
+  // 黑板面
+  const board = new THREE.Mesh(new THREE.BoxGeometry(boardW, boardH, 0.02), boardMat);
+  board.position.set(0, boardY, -0.02);
+  group.add(board);
+
+  // ====== 板报标题 ======
+  const titleCanvas = document.createElement('canvas');
+  titleCanvas.width = 1024;
+  titleCanvas.height = 256;
+  const titleCtx = titleCanvas.getContext('2d');
+  titleCtx.clearRect(0, 0, 1024, 256);
+
+  // 彩色标题 "学习园地"
+  const titleText = '学 习 园 地';
+  titleCtx.font = 'bold 120px "KaiTi", "STKaiti", "Microsoft YaHei", sans-serif';
+  titleCtx.textAlign = 'center';
+  titleCtx.textBaseline = 'middle';
+
+  // 描边效果
+  titleCtx.strokeStyle = '#FFD700';
+  titleCtx.lineWidth = 8;
+  titleCtx.strokeText(titleText, 512, 128);
+
+  // 彩色渐变填充
+  const titleGrad = titleCtx.createLinearGradient(150, 0, 874, 0);
+  titleGrad.addColorStop(0, '#FF6B6B');
+  titleGrad.addColorStop(0.25, '#FFD93D');
+  titleGrad.addColorStop(0.5, '#6BCB77');
+  titleGrad.addColorStop(0.75, '#4D96FF');
+  titleGrad.addColorStop(1, '#FF6B6B');
+  titleCtx.fillStyle = titleGrad;
+  titleCtx.fillText(titleText, 512, 128);
+
+  const titleTex = new THREE.CanvasTexture(titleCanvas);
+  const titlePlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 0.35),
+    new THREE.MeshStandardMaterial({ map: titleTex, transparent: true, roughness: 0.8, side: THREE.DoubleSide })
+  );
+  titlePlane.position.set(0, boardY + boardH / 2 - 0.25, -0.035);
+  titlePlane.rotation.y = Math.PI;
+  group.add(titlePlane);
+
+  // ====== 值日表 (左侧区域) ======
+  const dutyCanvas = document.createElement('canvas');
+  dutyCanvas.width = 512;
+  dutyCanvas.height = 512;
+  const dutyCtx = dutyCanvas.getContext('2d');
+  dutyCtx.clearRect(0, 0, 512, 512);
+
+  // 白色卡片背景（圆角模拟）
+  dutyCtx.fillStyle = '#FFFEF0';
+  dutyCtx.fillRect(20, 20, 472, 472);
+
+  // 标题
+  dutyCtx.fillStyle = '#CC3333';
+  dutyCtx.fillRect(20, 20, 472, 60);
+  dutyCtx.fillStyle = '#FFFFFF';
+  dutyCtx.font = 'bold 36px "KaiTi", "STKaiti", sans-serif';
+  dutyCtx.textAlign = 'center';
+  dutyCtx.fillText('值 日 表', 256, 58);
+
+  // 表头
+  dutyCtx.fillStyle = '#333333';
+  dutyCtx.font = '22px "KaiTi", "STKaiti", sans-serif';
+  const days = ['周一', '周二', '周三', '周四', '周五'];
+  const names = [
+    ['张三', '李四'],
+    ['王五', '赵六'],
+    ['刘七', '周八'],
+    ['吴九', '郑十'],
+    ['孙一', '钱二'],
+  ];
+
+  // 绘制表格线
+  dutyCtx.strokeStyle = '#999999';
+  dutyCtx.lineWidth = 2;
+  for (let i = 0; i <= 5; i++) {
+    const y = 100 + i * 72;
+    dutyCtx.beginPath();
+    dutyCtx.moveTo(40, y);
+    dutyCtx.lineTo(472, y);
+    dutyCtx.stroke();
+  }
+  dutyCtx.beginPath();
+  dutyCtx.moveTo(140, 100);
+  dutyCtx.lineTo(140, 460);
+  dutyCtx.stroke();
+
+  // 填入内容
+  dutyCtx.fillStyle = '#333333';
+  dutyCtx.textAlign = 'center';
+  dutyCtx.font = '24px "KaiTi", "STKaiti", sans-serif';
+  for (let i = 0; i < 5; i++) {
+    const y = 100 + i * 72 + 40;
+    dutyCtx.fillText(days[i], 90, y);
+    dutyCtx.fillText(names[i].join('、'), 306, y);
+  }
+
+  const dutyTex = new THREE.CanvasTexture(dutyCanvas);
+  const dutyPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.9),
+    new THREE.MeshStandardMaterial({ map: dutyTex, transparent: true, roughness: 0.8, side: THREE.DoubleSide })
+  );
+  dutyPlane.position.set(-3.0, boardY - 0.1, -0.035);
+  dutyPlane.rotation.y = Math.PI;
+  group.add(dutyPlane);
+
+  // 模拟图钉固定值日表
+  const pinColors = [0xFF4444, 0x4488FF, 0x44BB44, 0xFFCC00];
+  const pinPositions = [
+    [-3.4, boardY + 0.3], [-2.6, boardY + 0.3],
+    [-3.4, boardY - 0.5], [-2.6, boardY - 0.5],
+  ];
+  pinPositions.forEach(([px, py], idx) => {
+    const pinMat = new THREE.MeshStandardMaterial({ 
+      color: pinColors[idx % pinColors.length], 
+      metalness: 0.3, roughness: 0.4 
+    });
+    const pin = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), pinMat);
+    pin.position.set(px, py, -0.04);
+    group.add(pin);
+  });
+
+  // ====== 成绩光荣榜 (中左区域) ======
+  const honorCanvas = document.createElement('canvas');
+  honorCanvas.width = 512;
+  honorCanvas.height = 512;
+  const honorCtx = honorCanvas.getContext('2d');
+  honorCtx.clearRect(0, 0, 512, 512);
+
+  // 浅黄色卡片
+  honorCtx.fillStyle = '#FFF8DC';
+  honorCtx.fillRect(20, 20, 472, 472);
+
+  // 金色标题栏
+  honorCtx.fillStyle = '#DAA520';
+  honorCtx.fillRect(20, 20, 472, 60);
+  honorCtx.fillStyle = '#FFFFFF';
+  honorCtx.font = 'bold 34px "KaiTi", "STKaiti", sans-serif';
+  honorCtx.textAlign = 'center';
+  honorCtx.fillText('⭐ 成绩光荣榜 ⭐', 256, 58);
+
+  // 列出优秀学生
+  honorCtx.fillStyle = '#333333';
+  honorCtx.font = '26px "KaiTi", "STKaiti", sans-serif';
+  honorCtx.textAlign = 'left';
+  const students = [
+    '第一名  张  三  98分',
+    '第二名  李  四  96分',
+    '第三名  王  五  95分',
+    '第四名  赵  六  93分',
+    '第五名  刘  七  91分',
+  ];
+  students.forEach((s, i) => {
+    const y = 120 + i * 68;
+    // 排名奖章
+    if (i < 3) {
+      honorCtx.fillStyle = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32';
+      honorCtx.font = '32px serif';
+      honorCtx.fillText('🏅', 40, y + 5);
+    }
+    honorCtx.fillStyle = '#333333';
+    honorCtx.font = '26px "KaiTi", "STKaiti", sans-serif';
+    honorCtx.fillText(s, 80, y);
+  });
+
+  const honorTex = new THREE.CanvasTexture(honorCanvas);
+  const honorPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.9),
+    new THREE.MeshStandardMaterial({ map: honorTex, transparent: true, roughness: 0.8, side: THREE.DoubleSide })
+  );
+  honorPlane.position.set(-1.5, boardY - 0.1, -0.035);
+  honorPlane.rotation.y = Math.PI;
+  group.add(honorPlane);
+
+  // 图钉
+  [[-1.9, boardY + 0.3], [-1.1, boardY + 0.3]].forEach(([px, py], idx) => {
+    const pin = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025, 8, 8),
+      new THREE.MeshStandardMaterial({ color: pinColors[(idx + 2) % pinColors.length], metalness: 0.3, roughness: 0.4 })
+    );
+    pin.position.set(px, py, -0.04);
+    group.add(pin);
+  });
+
+  // ====== 手绘装饰画 (右侧区域) ======
+  const artCanvas = document.createElement('canvas');
+  artCanvas.width = 512;
+  artCanvas.height = 512;
+  const artCtx = artCanvas.getContext('2d');
+  artCtx.clearRect(0, 0, 512, 512);
+
+  // 白色画纸
+  artCtx.fillStyle = '#FFFFFF';
+  artCtx.fillRect(20, 20, 472, 472);
+
+  // 画一个简单的风景画 — 蓝天白云加绿地和太阳
+  // 天空
+  const skyGrad = artCtx.createLinearGradient(20, 20, 20, 300);
+  skyGrad.addColorStop(0, '#87CEEB');
+  skyGrad.addColorStop(1, '#E0F0FF');
+  artCtx.fillStyle = skyGrad;
+  artCtx.fillRect(30, 30, 452, 270);
+
+  // 太阳
+  artCtx.fillStyle = '#FFD700';
+  artCtx.beginPath();
+  artCtx.arc(400, 80, 40, 0, Math.PI * 2);
+  artCtx.fill();
+
+  // 阳光射线
+  artCtx.strokeStyle = '#FFA500';
+  artCtx.lineWidth = 3;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+    artCtx.beginPath();
+    artCtx.moveTo(400 + Math.cos(a) * 45, 80 + Math.sin(a) * 45);
+    artCtx.lineTo(400 + Math.cos(a) * 60, 80 + Math.sin(a) * 60);
+    artCtx.stroke();
+  }
+
+  // 云朵
+  artCtx.fillStyle = '#FFFFFF';
+  const drawCloud = (cx, cy) => {
+    artCtx.beginPath();
+    artCtx.arc(cx, cy, 25, 0, Math.PI * 2);
+    artCtx.arc(cx + 20, cy - 10, 20, 0, Math.PI * 2);
+    artCtx.arc(cx - 20, cy - 5, 18, 0, Math.PI * 2);
+    artCtx.arc(cx + 10, cy + 5, 15, 0, Math.PI * 2);
+    artCtx.fill();
+  };
+  drawCloud(120, 80);
+  drawCloud(280, 60);
+
+  // 绿色草地
+  const grassGrad = artCtx.createLinearGradient(20, 300, 20, 492);
+  grassGrad.addColorStop(0, '#4CAF50');
+  grassGrad.addColorStop(1, '#2E7D32');
+  artCtx.fillStyle = grassGrad;
+  artCtx.fillRect(30, 300, 452, 192);
+
+  // 小花朵
+  const flowerColors = ['#FF6B6B', '#FFD93D', '#FF69B4', '#FF4500'];
+  for (let i = 0; i < 12; i++) {
+    const fx = 50 + Math.random() * 420;
+    const fy = 320 + Math.random() * 150;
+    artCtx.fillStyle = flowerColors[Math.floor(Math.random() * flowerColors.length)];
+    for (let p = 0; p < 5; p++) {
+      const pa = (p / 5) * Math.PI * 2;
+      artCtx.beginPath();
+      artCtx.arc(fx + Math.cos(pa) * 6, fy + Math.sin(pa) * 6, 4, 0, Math.PI * 2);
+      artCtx.fill();
+    }
+    artCtx.fillStyle = '#FFD700';
+    artCtx.beginPath();
+    artCtx.arc(fx, fy, 3, 0, Math.PI * 2);
+    artCtx.fill();
+  }
+
+  // 小树
+  artCtx.fillStyle = '#5D4037';
+  artCtx.fillRect(240, 240, 15, 65);
+  artCtx.fillStyle = '#2E7D32';
+  artCtx.beginPath();
+  artCtx.moveTo(247, 170);
+  artCtx.lineTo(205, 250);
+  artCtx.lineTo(290, 250);
+  artCtx.closePath();
+  artCtx.fill();
+  artCtx.beginPath();
+  artCtx.moveTo(247, 195);
+  artCtx.lineTo(210, 265);
+  artCtx.lineTo(285, 265);
+  artCtx.closePath();
+  artCtx.fill();
+
+  // 标注 "我们的教室" 
+  artCtx.fillStyle = '#FF4081';
+  artCtx.font = 'bold 32px "KaiTi", "STKaiti", sans-serif';
+  artCtx.textAlign = 'center';
+  artCtx.fillText('美丽的校园', 256, 470);
+
+  const artTex = new THREE.CanvasTexture(artCanvas);
+  const artPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.9),
+    new THREE.MeshStandardMaterial({ map: artTex, transparent: true, roughness: 0.8, side: THREE.DoubleSide })
+  );
+  artPlane.position.set(1.5, boardY - 0.1, -0.035);
+  artPlane.rotation.y = Math.PI;
+  group.add(artPlane);
+
+  // 图钉
+  [[1.1, boardY + 0.3], [1.9, boardY + 0.3]].forEach(([px, py], idx) => {
+    const pin = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025, 8, 8),
+      new THREE.MeshStandardMaterial({ color: pinColors[(idx + 1) % pinColors.length], metalness: 0.3, roughness: 0.4 })
+    );
+    pin.position.set(px, py, -0.04);
+    group.add(pin);
+  });
+
+  // ====== 班级公告 / 班规 (中右区域) ======
+  const noticeCanvas = document.createElement('canvas');
+  noticeCanvas.width = 512;
+  noticeCanvas.height = 512;
+  const noticeCtx = noticeCanvas.getContext('2d');
+  noticeCtx.clearRect(0, 0, 512, 512);
+
+  // 浅蓝色卡片
+  noticeCtx.fillStyle = '#E3F2FD';
+  noticeCtx.fillRect(20, 20, 472, 472);
+
+  // 蓝色标题栏
+  noticeCtx.fillStyle = '#1565C0';
+  noticeCtx.fillRect(20, 20, 472, 60);
+  noticeCtx.fillStyle = '#FFFFFF';
+  noticeCtx.font = 'bold 34px "KaiTi", "STKaiti", sans-serif';
+  noticeCtx.textAlign = 'center';
+  noticeCtx.fillText('📋 班级公约', 256, 58);
+
+  // 班规内容
+  noticeCtx.fillStyle = '#333333';
+  noticeCtx.font = '24px "KaiTi", "STKaiti", sans-serif';
+  noticeCtx.textAlign = 'left';
+  const rules = [
+    '一、按时到校，不迟到早退',
+    '二、上课认真听讲，积极发言',
+    '三、按时完成作业，不抄袭',
+    '四、尊敬师长，团结同学',
+    '五、爱护公物，保持卫生',
+    '六、课间文明活动，不追跑',
+  ];
+  rules.forEach((rule, i) => {
+    noticeCtx.fillText(rule, 50, 120 + i * 56);
+  });
+
+  // 签名
+  noticeCtx.fillStyle = '#888888';
+  noticeCtx.font = '20px "KaiTi", "STKaiti", sans-serif';
+  noticeCtx.textAlign = 'right';
+  noticeCtx.fillText('— 三年二班全体同学', 460, 470);
+
+  const noticeTex = new THREE.CanvasTexture(noticeCanvas);
+  const noticePlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.9),
+    new THREE.MeshStandardMaterial({ map: noticeTex, transparent: true, roughness: 0.8, side: THREE.DoubleSide })
+  );
+  noticePlane.position.set(3.0, boardY - 0.1, -0.035);
+  noticePlane.rotation.y = Math.PI;
+  group.add(noticePlane);
+
+  // 图钉
+  [[2.6, boardY + 0.3], [3.4, boardY + 0.3],
+   [2.6, boardY - 0.5], [3.4, boardY - 0.5]].forEach(([px, py], idx) => {
+    const pin = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025, 8, 8),
+      new THREE.MeshStandardMaterial({ color: pinColors[idx % pinColors.length], metalness: 0.3, roughness: 0.4 })
+    );
+    pin.position.set(px, py, -0.04);
+    group.add(pin);
+  });
+
+  // ====== 彩色装饰花边 (顶部) ======
+  const decorCanvas = document.createElement('canvas');
+  decorCanvas.width = 2048;
+  decorCanvas.height = 128;
+  const decorCtx = decorCanvas.getContext('2d');
+  decorCtx.clearRect(0, 0, 2048, 128);
+
+  // 三角旗帜彩旗
+  const flagColors = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#FF69B4', '#9B59B6'];
+  for (let i = 0; i < 30; i++) {
+    const x = i * 68 + 10;
+    decorCtx.fillStyle = flagColors[i % flagColors.length];
+    decorCtx.beginPath();
+    decorCtx.moveTo(x, 10);
+    decorCtx.lineTo(x + 60, 10);
+    decorCtx.lineTo(x + 30, 90);
+    decorCtx.closePath();
+    decorCtx.fill();
+  }
+
+  // 顶部串线
+  decorCtx.strokeStyle = '#666666';
+  decorCtx.lineWidth = 3;
+  decorCtx.beginPath();
+  decorCtx.moveTo(0, 10);
+  decorCtx.lineTo(2048, 10);
+  decorCtx.stroke();
+
+  const decorTex = new THREE.CanvasTexture(decorCanvas);
+  const decorPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(boardW - 0.2, 0.12),
+    new THREE.MeshStandardMaterial({ map: decorTex, transparent: true, roughness: 0.8, side: THREE.DoubleSide })
+  );
+  decorPlane.position.set(0, boardY + boardH / 2 - 0.08, -0.035);
+  decorPlane.rotation.y = Math.PI;
+  group.add(decorPlane);
+
+  // ====== 简单的木头边框 ======
+  const frameT = 0.05; // 边框厚度
+  // 上下边框
+  const topFrame = new THREE.Mesh(new THREE.BoxGeometry(boardW + frameT * 2, frameT, 0.04), frameMat);
+  topFrame.position.set(0, boardY + boardH / 2 + frameT / 2, -0.02);
+  group.add(topFrame);
+
+  const bottomFrame = new THREE.Mesh(new THREE.BoxGeometry(boardW + frameT * 2, frameT, 0.04), frameMat);
+  bottomFrame.position.set(0, boardY - boardH / 2 - frameT / 2, -0.02);
+  group.add(bottomFrame);
+
+  // 左右边框
+  const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameT, boardH, 0.04), frameMat);
+  leftFrame.position.set(-boardW / 2 - frameT / 2, boardY, -0.02);
+  group.add(leftFrame);
+
+  const rightFrame = new THREE.Mesh(new THREE.BoxGeometry(frameT, boardH, 0.04), frameMat);
+  rightFrame.position.set(boardW / 2 + frameT / 2, boardY, -0.02);
+  group.add(rightFrame);
+
+  parent.add(group);
 }
 
 /**
