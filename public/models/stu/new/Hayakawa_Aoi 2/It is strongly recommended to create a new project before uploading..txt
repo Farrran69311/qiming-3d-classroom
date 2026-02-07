@@ -1,0 +1,2 @@
+Since we have fully transitioned to lilToon, you can upload using the standard procedure.
+However, there may be conflicts with previous data, so we recommend uploading in a new project.
